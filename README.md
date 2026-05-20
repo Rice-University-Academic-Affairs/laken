@@ -1,18 +1,17 @@
 # laken
 
-Testable lakehouse code for Microsoft Fabric.
+The missing local development workflow for Microsoft Fabric.
 
-Build data code once, exercise it locally against parquet, then run the same package in
-Fabric notebooks and Spark jobs. `laken` keeps the local loop small without hiding the
-lakehouse model you ship to production.
+`laken` lets you develop Python code for Fabric locally, using the tooling you
+already trust.
 
-## Why laken?
+Write local code against real lakehouse data. The same code runs in Fabric
+without modification.
 
-- One Python API for local Delta and Fabric lakehouses
-- Pandas, Polars, and Spark DataFrame support
-- Schema-qualified table names like `marketing.products`
-- Local file/table helpers that mirror Fabric's `Files/` and `Tables/` layout
-- Local cache commands for inspecting, refreshing, and resetting Fabric-backed tables
+When you're ready, `laken deploy` packages your project, publishes it to Fabric,
+and makes it available to your Fabric notebooks.
+
+Keep your code modular, your notebooks thin, and your local workflow intact.
 
 ## Installation
 
