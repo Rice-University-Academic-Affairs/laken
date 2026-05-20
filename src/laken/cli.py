@@ -1,8 +1,11 @@
+import json
 import subprocess
 from pathlib import Path
 
+import requests
 import typer
 
+import laken.deploy  # noqa: F401
 from laken.deploy.build import run_build
 from laken.deploy.config import load_deploy_config, require_project_root
 from laken.deploy.fabric_client import publish_wheel
@@ -44,7 +47,7 @@ def _build_project() -> tuple[ProjectMetadata, Path]:
         run_build()
     except subprocess.CalledProcessError as exc:
         raise typer.Exit(exc.returncode or 1) from exc
-    wheel_path = resolve_wheel(metadata.name)
+    wheel_path, _ = resolve_wheel(metadata.name, metadata.wheel_version_pin())
     typer.echo(f"Built wheel: {wheel_path}")
     return metadata, wheel_path
 
@@ -56,11 +59,11 @@ def _upload_project(
     require_project_root()
     config = load_deploy_config(workspace_id, environment_id)
     metadata = read_project_metadata()
-    wheel_path = resolve_wheel(metadata.name)
+    wheel_path, wheel_version = resolve_wheel(metadata.name, metadata.wheel_version_pin())
     typer.echo(f"Wheel found: {wheel_path}")
     publish_wheel(config=config, wheel_path=wheel_path)
     typer.echo(
-        f"{metadata.name} {metadata.version} -> workspace {config.workspace_id} "
+        f"{metadata.name} {wheel_version} -> workspace {config.workspace_id} "
         f"environment {config.environment_id}"
     )
 
@@ -72,6 +75,14 @@ def _exit_on_error(action) -> None:
         raise
     except typer.Exit:
         raise
-    except (FileNotFoundError, RuntimeError, TimeoutError, ValueError) as exc:
+    except (
+        FileNotFoundError,
+        RuntimeError,
+        TimeoutError,
+        ValueError,
+        requests.RequestException,
+        KeyError,
+        json.JSONDecodeError,
+    ) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc

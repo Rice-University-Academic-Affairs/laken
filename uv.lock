@@ -161,6 +161,7 @@ name = "laken"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "packaging" },
     { name = "pandas" },
     { name = "polars" },
     { name = "pyarrow" },
@@ -178,6 +179,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "packaging", specifier = ">=24.0" },
     { name = "pandas", specifier = ">=3.0.3" },
     { name = "polars", specifier = ">=1.40.1" },
     { name = "pyarrow", specifier = ">=24.0.0" },

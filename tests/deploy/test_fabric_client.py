@@ -1,9 +1,10 @@
 from unittest.mock import Mock
 
+import pytest
 import requests
 
 from laken.deploy.config import DeployConfig
-from laken.deploy.fabric_client import BASE_URL, publish_wheel
+from laken.deploy.fabric_client import BASE_URL, FabricEnvironmentPublisher, publish_wheel
 
 
 def _config():
@@ -16,10 +17,10 @@ def _config():
     )
 
 
-def _response(json_data=None, headers=None, url="https://example.test"):
+def _response(json_data=None, headers=None, url="https://example.test", status_code=200):
     response = Mock(spec=requests.Response)
     response.headers = headers or {}
-    response.status_code = 200
+    response.status_code = status_code
     response.text = ""
     response.url = url
     response.raise_for_status.return_value = None
@@ -27,17 +28,17 @@ def _response(json_data=None, headers=None, url="https://example.test"):
     return response
 
 
-def test_publish_wheel_uses_operation_poll(monkeypatch, tmp_path, capsys):
+def test_publish_wheel_accepts_http_200_and_202(monkeypatch, tmp_path, capsys):
     wheel = tmp_path / "app-1.0.0-py3-none-any.whl"
     wheel.write_bytes(b"wheel")
     post = Mock(
         side_effect=[
             _response({"access_token": "token"}),
-            _response(),
-            _response(headers={"x-ms-operation-id": "operation"}),
+            _response(status_code=200),
+            _response(status_code=202),
         ]
     )
-    get = Mock(return_value=_response({"status": "Succeeded"}))
+    get = Mock()
     monkeypatch.setattr("laken.deploy.fabric_client.requests.post", post)
     monkeypatch.setattr("laken.deploy.fabric_client.requests.get", get)
 
@@ -57,32 +58,18 @@ def test_publish_wheel_uses_operation_poll(monkeypatch, tmp_path, capsys):
     assert publish_call.args[0] == (
         f"{BASE_URL}/workspaces/workspace/environments/environment/staging/publish?beta=false"
     )
-    get.assert_called_once_with(
-        f"{BASE_URL}/operations/operation",
-        headers={"Authorization": "Bearer token"},
-        timeout=60,
+    get.assert_not_called()
+    output = capsys.readouterr().out
+    assert "Wheel upload accepted (HTTP 200)." in output
+    assert "Submitting Fabric Environment publish..." in output
+    assert "Publish request accepted (HTTP 202)." in output
+
+
+def test_token_missing_access_token_raises(monkeypatch):
+    monkeypatch.setattr(
+        "laken.deploy.fabric_client.requests.post",
+        Mock(return_value=_response({})),
     )
-    assert "Publish succeeded." in capsys.readouterr().out
-
-
-def test_publish_wheel_falls_back_to_publish_details(monkeypatch, tmp_path):
-    wheel = tmp_path / "app-1.0.0-py3-none-any.whl"
-    wheel.write_bytes(b"wheel")
-    post = Mock(
-        side_effect=[
-            _response({"access_token": "token"}),
-            _response(),
-            _response(),
-        ]
-    )
-    get = Mock(return_value=_response({"publishDetails": {"status": "Succeeded"}}))
-    monkeypatch.setattr("laken.deploy.fabric_client.requests.post", post)
-    monkeypatch.setattr("laken.deploy.fabric_client.requests.get", get)
-
-    publish_wheel(config=_config(), wheel_path=wheel)
-
-    get.assert_called_once_with(
-        f"{BASE_URL}/workspaces/workspace/environments/environment/staging/publishDetails",
-        headers={"Authorization": "Bearer token"},
-        timeout=60,
-    )
+    publisher = FabricEnvironmentPublisher(_config())
+    with pytest.raises(RuntimeError, match="missing access_token"):
+        publisher._token()

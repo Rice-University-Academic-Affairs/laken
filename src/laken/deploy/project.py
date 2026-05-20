@@ -8,6 +8,16 @@ class ProjectMetadata:
     name: str
     version: str
 
+    def wheel_version_pin(self) -> str | None:
+        return self.version or None
+
+
+def _wheel_version_pin(project: dict) -> str | None:
+    version = project.get("version")
+    if version:
+        return str(version)
+    return None
+
 
 def read_project_metadata(pyproject_path: Path | None = None) -> ProjectMetadata:
     path = pyproject_path or Path.cwd() / "pyproject.toml"
@@ -16,4 +26,5 @@ def read_project_metadata(pyproject_path: Path | None = None) -> ProjectMetadata
     name = project.get("name")
     if not name:
         raise ValueError("[project].name is required in pyproject.toml")
-    return ProjectMetadata(name=str(name), version=str(project.get("version", "")))
+    pin = _wheel_version_pin(project)
+    return ProjectMetadata(name=str(name), version=pin or "")

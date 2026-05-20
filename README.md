@@ -19,8 +19,8 @@ laken deploy
 ```
 
 `laken deploy` builds the caller's wheel with `uv build`, uploads the wheel from `dist/`
-to the configured Fabric environment staging area, publishes it, and waits for Fabric to
-report success.
+to the configured Fabric environment staging area, and submits publish (HTTP 200 upload,
+HTTP 202 publish accepted).
 
 Required configuration can be supplied in `.env` or through the process environment:
 
@@ -44,6 +44,11 @@ For CI, split build and upload:
 laken build
 laken upload
 ```
+
+- Static `[project].version` in `pyproject.toml` — `laken upload` / `laken deploy` require a
+  matching wheel in `dist/` (run `laken build` after changing the version).
+- No static version (including `dynamic = ["version"]`) — uses the newest matching wheel in
+  `dist/`; the reported version comes from the wheel filename.
 
 Caller repos should contain one application package and run commands from the directory
 containing `pyproject.toml`. Fabric must already have a compatible Python and Spark
