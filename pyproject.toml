@@ -16,6 +16,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "requests>=2.32",
     "typer>=0.15",
+    "deltalake>=1.6.0",
 ]
 
 [project.scripts]

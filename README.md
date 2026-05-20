@@ -8,11 +8,11 @@ lakehouse model you ship to production.
 
 ## Why laken?
 
-- One Python API for local parquet and Fabric lakehouses
+- One Python API for local Delta and Fabric lakehouses
 - Pandas, Polars, and Spark DataFrame support
 - Schema-qualified table names like `marketing.products`
 - Local file/table helpers that mirror Fabric's `Files/` and `Tables/` layout
-- A single CLI command, `laken deploy`, for publishing packages to Fabric environments
+- Local cache commands for inspecting, refreshing, and resetting Fabric-backed tables
 
 ## Installation
 
@@ -50,7 +50,7 @@ lh.write_table(products, "marketing.products")
 result = lh.read_table("marketing.products", as_="polars")
 ```
 
-Run that code on your laptop and `Lakehouse()` writes parquet under `./lakehouse`.
+Run that code on your laptop and `Lakehouse()` writes Delta tables under `.laken/`.
 Run the same code inside Fabric and `Lakehouse()` uses the attached Fabric lakehouse.
 
 ## Deploy to Fabric
@@ -99,9 +99,12 @@ packages = ["src/myapp"]
 
 ```text
 laken deploy [--workspace-id <workspace-id>] [--environment-id <environment-id>]
+laken status
+laken refresh <table>
+laken reset <table>
 ```
 
-`deploy` is the only supported CLI command.
+`status`, `refresh`, and `reset` operate on the project-local `.laken/` workspace.
 
 ## Python API
 
@@ -179,12 +182,22 @@ lakehouse explicitly.
 
 | Class | Runtime | Storage |
 | --- | --- | --- |
-| `Lakehouse` | Auto-detects Fabric notebook context | Fabric when available, otherwise local parquet |
-| `LocalLakehouse` | Any Python process | `./lakehouse/Files` and `./lakehouse/Tables` |
+| `Lakehouse` | Auto-detects Fabric notebook context | Fabric when available, otherwise local Delta |
+| `LocalLakehouse` | Any Python process | `.laken/workspace/Files` and `.laken/workspace/Tables` |
 | `FabricLakehouse` | Fabric notebook or Spark runtime | Fabric lakehouse files and Delta tables |
 
-Local mode is intentionally lightweight: parquet files, no Delta transaction log, no
-time travel, and no live Fabric credentials.
+In local mode, `laken` reads and writes Delta tables in a project-local workspace under
+`.laken/`. The first time your code reads a Fabric lakehouse table, `laken` fetches
+that table from Fabric and stores it locally as Delta. Later reads use the local copy,
+so your development environment stays stable and fast.
+
+If the Fabric source changes, `laken` warns you that your local copy is stale. It does
+not replace local data automatically. Run `laken refresh <table>` when you want to
+update your local copy. Large tables are cached as fixed-size development samples and
+clearly marked as sampled.
+
+Local writes stay local. In Fabric, the same `read_table` and `write_table` calls
+resolve to the attached lakehouse.
 
 ## Development
 

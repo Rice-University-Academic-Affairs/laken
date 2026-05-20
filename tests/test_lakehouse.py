@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
+import laken
 from laken import FabricLakehouse, Lakehouse, LakehouseProtocol, LocalLakehouse
 from laken.lakehouse import _is_fabric_context
 
@@ -54,3 +55,13 @@ class TestLakehouseDispatch:
             lh = Lakehouse(lakehouse="Sales_LH")
         assert lh.read_table("products", as_="pandas") == "result"
         implementation.read_table.assert_called_once_with("products", as_="pandas")
+
+    def test_module_functions_use_default_lakehouse(self):
+        implementation = MagicMock()
+        implementation.read_table.return_value = "result"
+        with patch("laken.Lakehouse", return_value=implementation):
+            assert laken.read_table("products", as_="pandas") == "result"
+            laken.write_table("features", pd.DataFrame({"id": [1]}))
+        implementation.read_table.assert_called_once_with("products", as_="pandas")
+        implementation.write_table.assert_called_once()
+        assert implementation.write_table.call_args.args[1] == "features"

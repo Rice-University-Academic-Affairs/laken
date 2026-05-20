@@ -5,11 +5,14 @@ from laken.cli import app
 runner = CliRunner()
 
 
-def test_help_exposes_deploy_only():
+def test_help_exposes_commands():
     result = runner.invoke(app, ["--help"])
 
     assert result.exit_code == 0
     assert "deploy" in result.output
+    assert "status" in result.output
+    assert "refresh" in result.output
+    assert "reset" in result.output
     assert "build" not in result.output
     assert "upload" not in result.output
 
