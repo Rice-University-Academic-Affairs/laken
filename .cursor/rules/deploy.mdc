@@ -8,18 +8,19 @@ alwaysApply: false
 
 ## Flow
 
-1. `require_project_root()` — cwd must contain `pyproject.toml`.
-2. `read_project_metadata()` — requires `[project].name` in `pyproject.toml`.
-3. `run_build()` — runs `uv build` (writes `dist/`).
-4. `resolve_wheel(project_name)` — exactly one name-matched `*.whl` in `dist/`.
-5. `publish_wheel()` — upload to Fabric staging, submit publish (HTTP 200 + 202 accepted; no publish polling).
+- `laken build`: require project root, read metadata, run `uv build`, resolve the built wheel.
+- `laken upload`: require project root, load Fabric config, resolve an existing wheel in `dist/`, publish it.
+- `laken deploy`: run build, then upload.
+- `publish_wheel()` uploads to Fabric staging and submits publish; HTTP 200 + 202 are accepted, with no publish polling.
 
 ## Wheel resolution (`wheel.py`)
 
-- Normalized PEP 503 name match on wheel filenames.
-- 0 matches → `FileNotFoundError` (missing `dist/` or no wheel for project).
-- 1 match → path + version from filename.
-- 2+ matches → `RuntimeError` listing conflicting wheels.
+- Match wheel filenames by normalized PEP 503 project name.
+- Missing `dist/` or no matching wheel → `FileNotFoundError`.
+- Static `[project].version` pins resolution to that exact wheel version.
+- No static version, including dynamic versions, resolves to the newest matching wheel.
+- Multiple wheels for the selected version → `RuntimeError` listing conflicting wheels.
+- Invalid wheel filenames are ignored.
 
 ## Configuration (`config.py`)
 
