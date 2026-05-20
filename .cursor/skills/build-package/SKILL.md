@@ -15,6 +15,8 @@ description: Build the laken wheel and sdist with uv build. Use when validating 
 
 - Repo root as cwd
 - `uv sync` completed at least once
+- Cursor Cloud and Linux CI: use native Linux shell
+- Windows hosts: use WSL bash for direct `uv` commands, not PowerShell
 
 ## Steps
 
@@ -26,6 +28,24 @@ uv build
 ```
 
 2. Inspect output under `dist/` (e.g. `laken-*.whl`). Do not commit `dist/` — it is gitignored.
+
+### Optional script
+
+From repo root. The direct `uv build` command above is preferred on Linux, Cursor Cloud, macOS, and WSL. `.cursor/scripts/build_package.py` is a small Python wrapper that resolves the repo root; when launched with Windows Python, it runs `uv` inside WSL automatically.
+
+Linux / WSL:
+
+```bash
+uv run python .cursor/scripts/build_package.py
+```
+
+Windows PowerShell:
+
+```powershell
+python .cursor\scripts\build_package.py
+```
+
+Do not prefix the wrapper with Windows `uv`.
 
 ## Success criteria
 

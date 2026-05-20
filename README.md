@@ -108,7 +108,7 @@ lh.read_table("marketing.products", as_="pandas")
 
 ## Development
 
-AI/agent setup: see [AGENTS.md](AGENTS.md). On Windows, use **WSL** at `/mnt/c/.../laken` for `uv sync` / `uv run` — do not run `uv` from PowerShell (it replaces the Unix `.venv` with `Lib/`/`Scripts/`).
+AI/agent setup: see [AGENTS.md](AGENTS.md). Cursor Cloud and Linux shells use `uv` directly from the repo root. On Windows, use **WSL** at `/mnt/c/.../laken` for `uv sync` / `uv run` — do not run Windows `uv` from PowerShell against `C:\...\laken`.
 
 ```bash
 uv sync
