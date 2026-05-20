@@ -1,0 +1,35 @@
+[project]
+name = "laken"
+version = "0.1.0"
+description = "Local and Fabric lakehouse abstraction for modular, testable data code"
+readme = "README.md"
+authors = [
+    { name = "Cody VanZandt", email = "cav3@rice.edu" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=3.0.3",
+    "polars>=1.40.1",
+    "pyarrow>=24.0.0",
+    "pyspark>=3.5",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "ruff>=0.15.13",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
