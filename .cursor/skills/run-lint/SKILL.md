@@ -40,24 +40,6 @@ uv run ruff format
 
 Re-run `uv run ruff check` after format if needed.
 
-### Optional script
-
-From repo root. The direct `uv run ruff ...` commands above are preferred on Linux, Cursor Cloud, macOS, and WSL. `.cursor/scripts/run_lint.py` is a small Python wrapper that resolves the repo root; when launched with Windows Python, it runs `uv` inside WSL automatically.
-
-Linux / WSL:
-
-```bash
-uv run python .cursor/scripts/run_lint.py
-```
-
-Windows PowerShell:
-
-```powershell
-python .cursor\scripts\run_lint.py
-```
-
-Do not prefix the wrapper with Windows `uv`.
-
 ## Success criteria
 
 - `uv run ruff check` exits 0

@@ -59,24 +59,6 @@ uv run pytest tests/deploy/test_wheel.py -q
 uv run pytest tests/deploy -q -k test_resolve
 ```
 
-### Optional script
-
-From repo root. The direct `uv run pytest` commands above are preferred on Linux, Cursor Cloud, macOS, and WSL. `.cursor/scripts/run_tests.py` is a small Python wrapper that resolves the repo root; when launched with Windows Python, it runs `uv` inside WSL automatically.
-
-Linux / WSL:
-
-```bash
-uv run python .cursor/scripts/run_tests.py tests/deploy -q
-```
-
-Windows PowerShell:
-
-```powershell
-python .cursor\scripts\run_tests.py tests/deploy -q
-```
-
-Do not prefix the wrapper with Windows `uv`.
-
 ## Success criteria
 
 - Exit code 0
