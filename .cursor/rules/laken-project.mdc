@@ -1,0 +1,60 @@
+---
+description: Laken repo layout, uv workflow, and agent defaults
+alwaysApply: true
+---
+
+# laken project defaults
+
+## Where to work
+
+- Run commands from the repo root (`pyproject.toml`, `uv.lock`).
+- Edit source under `src/` and `tests/` only.
+
+## uv workflow (WSL / Unix venv)
+
+This repo uses a **Unix-style** `.venv` (`bin/`, `lib/`, often `lib64/` on Linux). That is the intended layout.
+
+On a Windows host, the project path is usually `/mnt/c/Users/.../laken` in **WSL bash**. Run **all** `uv` commands there — not from PowerShell or cmd.
+
+- `uv sync` before the first `uv run …` in a session and after dependency changes.
+- Use `uv run <tool>` (pytest, ruff, python, …). Do not use `pip install -e .` unless the user asks.
+- Dev dependencies (`pytest`, `ruff`) live in `[dependency-groups] dev` in `pyproject.toml`.
+- From Windows automation (Cursor agent shell), use WSL only: `wsl -e bash -lc 'cd /mnt/c/.../laken && uv …'`.
+- **Never** run `uv sync`, `uv run`, or `uv run python .cursor/scripts/...` from PowerShell on `C:\...` — even one command can corrupt or replace the Unix `.venv`.
+- `.cursor/scripts/*.py` call WSL when launched from Windows Python, but prefer `wsl … && uv run pytest` directly to avoid Windows `uv` touching the project first.
+
+## Virtual environment — do not destroy
+
+**Never delete or recreate `.venv`** unless the user explicitly asks in the current message.
+
+Forbidden without explicit user request:
+
+- `Remove-Item -Recurse .venv`, `rm -rf .venv`, or any command that removes the `.venv` directory
+- `uv venv --clear`, or “fixing” sync by wiping `.venv`
+
+If `uv sync` fails (e.g. `failed to remove file .venv\lib64` or `Lib` access denied):
+
+1. Stop — do not delete `.venv`.
+2. Report the error. Likely cause: `uv` was run from the **wrong shell** (PowerShell vs WSL).
+3. User recreates from WSL only: `rm -rf .venv && uv sync` in bash under `/mnt/c/.../laken`.
+
+**Wrong layout:** `.venv/Scripts/` and `.venv/Lib/` with `pyvenv.cfg` pointing at `cpython-*-windows-*` — native Windows uv; not used for this project.
+
+## Do not modify
+
+- `.venv/` (no deletes, no edits inside), `dist/`, `build/`, `*.egg-info/`
+- `.pytest_cache/`, `.ruff_cache/`
+- Local lakehouse / Spark artifact dirs (see `.gitignore`)
+
+## Style and changes
+
+- Match Ruff settings in `pyproject.toml`: line length 100, target `py311`, rules E/F/I/UP/B/SIM.
+- Prefer minimal, focused diffs; no drive-by refactors.
+- Do not add comments or docstrings unless the user asks.
+
+## Tests by area
+
+- Changes under `src/laken/deploy/` → run at least `uv run pytest tests/deploy -q` (via WSL on Windows hosts).
+- Broader lakehouse changes → `uv run pytest` (full suite).
+
+See `AGENTS.md` for the repository map and command table.

@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Local and Fabric lakehouse abstraction for modular, testable data code"
 readme = "README.md"
 authors = [
-    { name = "Cody VanZandt", email = "cav3@rice.edu" }
+    { name = "Cody VanZandt", email = "cody.a.vanzandt@gmail.com" }
 ]
 requires-python = ">=3.11"
 dependencies = [

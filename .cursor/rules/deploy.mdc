@@ -1,0 +1,41 @@
+---
+description: Fabric deploy CLI and wheel publishing
+globs: src/laken/deploy/**/*.py, tests/deploy/**/*.py
+alwaysApply: false
+---
+
+# Deploy CLI
+
+## Flow
+
+1. `require_project_root()` — cwd must contain `pyproject.toml`.
+2. `read_project_metadata()` — requires `[project].name` in `pyproject.toml`.
+3. `run_build()` — runs `uv build` (writes `dist/`).
+4. `resolve_wheel(project_name)` — exactly one name-matched `*.whl` in `dist/`.
+5. `publish_wheel()` — upload to Fabric staging, submit publish (HTTP 200 + 202 accepted; no publish polling).
+
+## Wheel resolution (`wheel.py`)
+
+- Normalized PEP 503 name match on wheel filenames.
+- 0 matches → `FileNotFoundError` (missing `dist/` or no wheel for project).
+- 1 match → path + version from filename.
+- 2+ matches → `RuntimeError` listing conflicting wheels.
+
+## Configuration (`config.py`)
+
+- Required env: `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `FABRIC_WORKSPACE_ID`, `FABRIC_ENVIRONMENT_ID` (or `.env` via python-dotenv).
+- CLI flags `--workspace-id` / `--environment-id` override env.
+
+## Tests
+
+Minimum after deploy changes:
+
+```bash
+uv run pytest tests/deploy -q
+```
+
+Tests mock HTTP; no live Fabric credentials needed.
+
+## Safety
+
+Do not run `laken deploy` against real workspaces unless the user explicitly requests it.

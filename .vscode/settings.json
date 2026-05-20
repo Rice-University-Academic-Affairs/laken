@@ -1,0 +1,8 @@
+{
+  "terminal.integrated.profiles.windows": {
+    "WSL": {
+      "path": "C:\\Windows\\System32\\wsl.exe"
+    }
+  },
+  "terminal.integrated.defaultProfile.windows": "WSL"
+}

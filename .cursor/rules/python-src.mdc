@@ -1,0 +1,33 @@
+---
+description: Python conventions for laken library code
+globs: src/**/*.py, tests/**/*.py
+alwaysApply: false
+---
+
+# Python source and tests
+
+## Lakehouse package (`src/laken/`)
+
+- `lakehouse.py` — `Lakehouse` facade; picks local vs Fabric backend.
+- `local.py` — parquet files under a configurable root (default `./lakehouse`).
+- `fabric.py` — Delta tables + Spark; expects Fabric notebook runtime for integration.
+- `frames.py` — coerce between pandas, polars, and Spark by `as_=` parameter.
+- `paths.py`, `types.py`, `protocol.py` — shared path parsing and protocols.
+
+## Deploy package (`src/laken/deploy/`)
+
+- Thin orchestration; CLI lives in `cli.py`.
+- `build.py` — subprocess `uv build` from project cwd.
+- `fabric_client.py` — Azure token + Fabric staging/publish HTTP.
+- `config.py` — `.env` / env vars and `require_project_root()`.
+- `project.py`, `wheel.py` — read `pyproject.toml` metadata and resolve `dist/*.whl`.
+
+## Tests (`tests/`)
+
+- Shared fixtures in `tests/conftest.py`: `lakehouse`, `sample_pandas`, `sample_polars`, `sample_df` (parametrized pandas/polars).
+- Mirror module layout: root tests for lakehouse/frames/paths; `tests/deploy/` for deploy modules.
+- Prefer existing fixture patterns over new test harnesses.
+
+## Verification
+
+After edits: `uv sync` (if deps changed) → `uv run ruff check` → scoped or full `uv run pytest` per area touched.
