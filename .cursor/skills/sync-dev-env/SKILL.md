@@ -14,37 +14,32 @@ description: Install or refresh the laken dev environment with uv sync. Use when
 ## Prerequisites
 
 - [uv](https://docs.astral.sh/uv/) installed on `PATH`
-- Shell at repo root (`pyproject.toml`, `uv.lock` present)
-- Cursor Cloud and Linux CI: use the native Linux shell, usually `/workspace`
-- Windows hosts: use WSL bash, e.g. `/mnt/c/Users/.../laken`; do not run Windows `uv` from PowerShell or cmd
+- Repo root as cwd (`pyproject.toml`, `uv.lock` present)
+- Linux/Cursor Cloud: use the native shell; Windows hosts: use WSL bash
+- Never delete or recreate `.venv` unless the user explicitly asks
 
 ## Steps
 
-1. From repo root:
+Run:
 
 ```bash
 uv sync
 ```
 
-2. Wait for completion. First sync may take a while (includes `pyspark` and other heavy deps).
-
-3. Confirm `.venv` has `bin/` and `lib/` (Unix layout), not `Scripts/` + `Lib/`.
+First sync may take a while because the dev environment includes heavy dependencies.
 
 ## If `uv sync` fails
 
-Stop. **Do not** delete `.venv` unless the user explicitly asks.
-
-On Windows hosts, `failed to remove file .venv\lib64` or mixed `Lib`/`lib64` usually means native Windows `uv` ran on `C:\...` and conflicted with the WSL venv. Tell the user; they can recreate from WSL only if they explicitly choose to: `rm -rf .venv && uv sync` in bash.
+Stop and report the error. On Windows hosts, `failed to remove file .venv\lib64` or mixed `Lib`/`lib64` usually means native Windows `uv` touched a WSL repo.
 
 ## Success criteria
 
 - Exit code 0
-- `.venv/` exists at repo root
+- `.venv/` exists with Unix layout (`bin/`, `lib/`)
 - `uv run pytest --version` and `uv run ruff --version` succeed
 
 ## Do not
 
-- Delete or recreate `.venv` unless the user explicitly asks in the current message
-- `pip install -e .` or `pip install pytest ruff` unless the user explicitly asks
+- Delete or recreate `.venv` unless the user explicitly asks
+- Use `pip install -e .` or install dev tools with pip unless the user explicitly asks
 - Edit files inside `.venv/`
-- Commit `.venv/` (gitignored)

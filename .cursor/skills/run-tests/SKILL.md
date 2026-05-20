@@ -14,19 +14,12 @@ description: Run the laken test suite with uv and pytest. Use when verifying cod
 ## Prerequisites
 
 - Repo root as cwd
-- Dev env synced: `uv sync` (run first if unsure)
-- Cursor Cloud and Linux CI: use native Linux shell
-- Windows hosts: use WSL bash for direct `uv` commands, not PowerShell
+- Dev env synced; run `sync-dev-env` first if this is the first use, dependencies changed, or pytest is missing
+- Linux/Cursor Cloud: use the native shell; Windows hosts: use WSL bash
 
 ## Steps
 
-1. Ensure dependencies are installed:
-
-```bash
-uv sync
-```
-
-2. Run tests (pick scope):
+Pick the narrowest useful scope:
 
 **Full suite (default):**
 

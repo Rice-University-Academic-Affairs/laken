@@ -14,25 +14,18 @@ description: Lint laken Python sources with Ruff via uv. Use for style checks, i
 ## Prerequisites
 
 - Repo root as cwd
-- Dev env synced: `uv sync` (run first if unsure)
-- Cursor Cloud and Linux CI: use native Linux shell
-- Windows hosts: use WSL bash for direct `uv` commands, not PowerShell
+- Dev env synced; run `sync-dev-env` first if this is the first use, dependencies changed, or Ruff is missing
+- Linux/Cursor Cloud: use the native shell; Windows hosts: use WSL bash
 
 ## Steps
 
-1. Ensure dependencies are installed:
-
-```bash
-uv sync
-```
-
-2. Check (required):
+Check:
 
 ```bash
 uv run ruff check
 ```
 
-3. Auto-format (optional, when user wants fixes applied):
+Auto-format when the user wants formatting fixes applied:
 
 ```bash
 uv run ruff format

@@ -14,20 +14,18 @@ description: Build the laken wheel and sdist with uv build. Use when validating 
 ## Prerequisites
 
 - Repo root as cwd
-- `uv sync` completed at least once
-- Cursor Cloud and Linux CI: use native Linux shell
-- Windows hosts: use WSL bash for direct `uv` commands, not PowerShell
+- Dev env synced; run `sync-dev-env` first if this is the first use, dependencies changed, or build tooling is missing
+- Linux/Cursor Cloud: use the native shell; Windows hosts: use WSL bash
 
 ## Steps
 
-1. From repo root:
+Run:
 
 ```bash
-uv sync
 uv build
 ```
 
-2. Inspect output under `dist/` (e.g. `laken-*.whl`). Do not commit `dist/` — it is gitignored.
+Inspect output under `dist/` (e.g. `laken-*.whl`). Do not commit `dist/` — it is gitignored.
 
 ## Success criteria
 
