@@ -8,6 +8,55 @@ Testable lakehouse code for Microsoft Fabric — develop locally with parquet, d
 uv add laken
 ```
 
+## Deploy to Fabric
+
+Install `uv`, then run `laken` from the root of the application repo you want to deploy:
+
+```bash
+cd myapp
+cp .env.example .env
+laken deploy
+```
+
+`laken deploy` builds the caller's wheel with `uv build`, uploads the wheel from `dist/`
+to the configured Fabric environment staging area, publishes it, and waits for Fabric to
+report success.
+
+Required configuration can be supplied in `.env` or through the process environment:
+
+| Name | Description |
+| --- | --- |
+| `AZURE_TENANT_ID` | Azure tenant for client-credentials auth |
+| `AZURE_CLIENT_ID` | Azure application client id |
+| `AZURE_CLIENT_SECRET` | Azure application client secret |
+| `FABRIC_WORKSPACE_ID` | Fabric workspace id |
+| `FABRIC_ENVIRONMENT_ID` | Fabric environment id |
+
+Use flags to override the Fabric target without changing `.env`:
+
+```bash
+laken deploy --workspace-id <workspace-id> --environment-id <environment-id>
+```
+
+For CI, split build and upload:
+
+```bash
+laken build
+laken upload
+```
+
+Caller repos should contain one application package and run commands from the directory
+containing `pyproject.toml`. Fabric must already have a compatible Python and Spark
+runtime, and the caller package should depend on `laken` in its own `pyproject.toml`.
+
+`laken` uploads the wheel exactly as built. With hatchling and a `src/` layout, configure
+wheel packages so test files are not included:
+
+```toml
+[tool.hatch.build.targets.wheel]
+packages = ["src/myapp"]
+```
+
 ## Local development
 
 ```python
