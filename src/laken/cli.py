@@ -15,17 +15,9 @@ from laken.deploy.wheel import resolve_wheel
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 
 
-@app.command()
-def build() -> None:
-    _exit_on_error(_build_project)
-
-
-@app.command()
-def upload(
-    workspace_id: str | None = typer.Option(None, "--workspace-id"),
-    environment_id: str | None = typer.Option(None, "--environment-id"),
-) -> None:
-    _exit_on_error(lambda: _upload_project(workspace_id, environment_id))
+@app.callback()
+def main() -> None:
+    pass
 
 
 @app.command()
