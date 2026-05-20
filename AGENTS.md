@@ -63,3 +63,10 @@ Step-by-step: `.cursor/skills/` — `/sync-dev-env`, `/run-tests`, `/run-lint`, 
 - Tests are mocked; no live Fabric credentials required for pytest
 
 Human docs: [README.md](README.md).
+
+## Cursor Cloud specific instructions
+
+- The VM update script installs `uv` (if missing) and runs `uv sync`. No manual bootstrap needed.
+- `uv sync` auto-downloads CPython 3.11 per `.python-version`; no system Python 3.11 is required.
+- No external services, Docker, or credentials are needed — all tests are fully mocked.
+- All dev commands are in the Commands table above: `uv run pytest`, `uv run ruff check`, `uv build`.
