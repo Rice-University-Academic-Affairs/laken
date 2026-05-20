@@ -14,6 +14,13 @@ def _get_current_spark_session() -> SparkSession:
     return SparkSession.builder.getOrCreate()
 
 
+def _fabric_constants():
+    __import__("com.microsoft.spark.fabric")
+    from com.microsoft.spark.fabric.Constants import Constants
+
+    return Constants
+
+
 class FabricLakehouse:
     def __init__(
         self,
@@ -63,6 +70,17 @@ class FabricLakehouse:
         self._require_cross_lakehouse_context()
         return f"{self._workspace_name}.{self._lakehouse}.{schema}.{table}"
 
+    def _resolve_warehouse_workspace_id(self, workspace_id: str | None) -> str:
+        resolved = workspace_id if workspace_id is not None else self._workspace_id
+        if resolved is None:
+            raise ValueError("warehouse reads require: workspace_id")
+        return resolved
+
+    def _resolve_warehouse_table_name(
+        self, table_name: str, warehouse_name: str, schema: str | None
+    ) -> str:
+        return ".".join(part for part in [warehouse_name, schema, table_name] if part)
+
     def _file_path(self, path: str) -> str:
         normalized = path.replace("\\", "/").lstrip("/")
         if not self._explicit_lakehouse:
@@ -83,6 +101,61 @@ class FabricLakehouse:
     ) -> SparkDataFrame | pd.DataFrame | pl.DataFrame:
         spark = self._spark()
         spark_df = spark.read.table(self._resolve_table_name(name))
+        return from_spark(spark_df, as_)
+
+    @overload
+    def load_table_from_warehouse(
+        self,
+        table_name: str,
+        warehouse_name: str,
+        *,
+        schema: str | None = "dbo",
+        workspace_id: str | None = None,
+        as_: Literal["spark"] = "spark",
+    ) -> SparkDataFrame: ...
+
+    @overload
+    def load_table_from_warehouse(
+        self,
+        table_name: str,
+        warehouse_name: str,
+        *,
+        schema: str | None = "dbo",
+        workspace_id: str | None = None,
+        as_: Literal["pandas"],
+    ) -> pd.DataFrame: ...
+
+    @overload
+    def load_table_from_warehouse(
+        self,
+        table_name: str,
+        warehouse_name: str,
+        *,
+        schema: str | None = "dbo",
+        workspace_id: str | None = None,
+        as_: Literal["polars"],
+    ) -> pl.DataFrame: ...
+
+    def load_table_from_warehouse(
+        self,
+        table_name: str,
+        warehouse_name: str,
+        *,
+        schema: str | None = "dbo",
+        workspace_id: str | None = None,
+        as_: DfKind = "spark",
+    ) -> SparkDataFrame | pd.DataFrame | pl.DataFrame:
+        constants = _fabric_constants()
+        spark_df = (
+            self._spark()
+            .read.option(
+                constants.WorkspaceId,
+                self._resolve_warehouse_workspace_id(workspace_id),
+            )
+            .synapsesql(
+                self._resolve_warehouse_table_name(table_name, warehouse_name, schema)
+            )
+        )
         return from_spark(spark_df, as_)
 
     def write_table(
