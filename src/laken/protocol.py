@@ -8,7 +8,7 @@ from laken.types import DfKind, InputFrame, OutputFrame, WriteMode
 
 
 @runtime_checkable
-class Lakehouse(Protocol):
+class LakehouseProtocol(Protocol):
     @overload
     def read_table(self, name: str, *, as_: Literal["spark"] = "spark") -> SparkDataFrame: ...
 

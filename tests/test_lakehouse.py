@@ -1,0 +1,56 @@
+import sys
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
+
+import pandas as pd
+
+from laken import FabricLakehouse, Lakehouse, LakehouseProtocol, LocalLakehouse
+from laken.lakehouse import _is_fabric_context
+
+
+def _fake_notebookutils():
+    return SimpleNamespace(
+        runtime=SimpleNamespace(
+            context={
+                "defaultLakehouseName": "Default_LH",
+                "currentWorkspaceId": "ws-id-123",
+                "currentWorkspaceName": "MyWorkspace",
+            }
+        )
+    )
+
+
+class TestLakehouseDispatch:
+    def test_local_context_uses_local_lakehouse(self, tmp_path):
+        lh = Lakehouse(root=tmp_path / "lakehouse")
+        df = pd.DataFrame({"id": [1], "value": ["a"]})
+        lh.write_table(df, "products")
+        result = lh.read_table("products", as_="pandas")
+        assert isinstance(lh._implementation, LocalLakehouse)
+        assert result.equals(df)
+        assert isinstance(lh, LakehouseProtocol)
+
+    def test_fabric_context_uses_fabric_lakehouse(self, monkeypatch):
+        monkeypatch.setitem(sys.modules, "notebookutils", _fake_notebookutils())
+        lh = Lakehouse(lakehouse="Sales_LH")
+        assert isinstance(lh._implementation, FabricLakehouse)
+        assert lh._implementation._lakehouse == "Sales_LH"
+        assert lh._implementation._workspace_id == "ws-id-123"
+        assert lh._implementation._workspace_name == "MyWorkspace"
+
+    def test_fabric_detection_requires_runtime_context(self, monkeypatch):
+        monkeypatch.setitem(sys.modules, "notebookutils", SimpleNamespace())
+        assert not _is_fabric_context()
+        monkeypatch.setitem(sys.modules, "notebookutils", _fake_notebookutils())
+        assert _is_fabric_context()
+
+    def test_methods_delegate_to_selected_implementation(self):
+        implementation = MagicMock()
+        implementation.read_table.return_value = "result"
+        with (
+            patch("laken.lakehouse._is_fabric_context", return_value=True),
+            patch("laken.lakehouse.FabricLakehouse", return_value=implementation),
+        ):
+            lh = Lakehouse(lakehouse="Sales_LH")
+        assert lh.read_table("products", as_="pandas") == "result"
+        implementation.read_table.assert_called_once_with("products", as_="pandas")
