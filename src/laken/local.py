@@ -56,6 +56,50 @@ class LocalLakehouse:
         dataset = pq.ParquetDataset(table_dir)
         return from_arrow(dataset.read(), as_)
 
+    @overload
+    def load_table_from_warehouse(
+        self,
+        table_name: str,
+        warehouse_name: str,
+        *,
+        schema: str | None = "dbo",
+        workspace_id: str | None = None,
+        as_: Literal["spark"] = "spark",
+    ) -> SparkDataFrame: ...
+
+    @overload
+    def load_table_from_warehouse(
+        self,
+        table_name: str,
+        warehouse_name: str,
+        *,
+        schema: str | None = "dbo",
+        workspace_id: str | None = None,
+        as_: Literal["pandas"],
+    ) -> pd.DataFrame: ...
+
+    @overload
+    def load_table_from_warehouse(
+        self,
+        table_name: str,
+        warehouse_name: str,
+        *,
+        schema: str | None = "dbo",
+        workspace_id: str | None = None,
+        as_: Literal["polars"],
+    ) -> pl.DataFrame: ...
+
+    def load_table_from_warehouse(
+        self,
+        table_name: str,
+        warehouse_name: str,
+        *,
+        schema: str | None = "dbo",
+        workspace_id: str | None = None,
+        as_: DfKind = "spark",
+    ) -> SparkDataFrame | pd.DataFrame | pl.DataFrame:
+        return self.read_file(table_name, as_=as_)
+
     def write_table(
         self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite"
     ) -> None:

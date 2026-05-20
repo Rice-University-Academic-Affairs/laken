@@ -20,6 +20,49 @@ class Lakehouse(Protocol):
 
     def read_table(self, name: str, *, as_: DfKind = "spark") -> OutputFrame: ...
 
+    @overload
+    def load_table_from_warehouse(
+        self,
+        table_name: str,
+        warehouse_name: str,
+        *,
+        schema: str | None = "dbo",
+        workspace_id: str | None = None,
+        as_: Literal["spark"] = "spark",
+    ) -> SparkDataFrame: ...
+
+    @overload
+    def load_table_from_warehouse(
+        self,
+        table_name: str,
+        warehouse_name: str,
+        *,
+        schema: str | None = "dbo",
+        workspace_id: str | None = None,
+        as_: Literal["pandas"],
+    ) -> pd.DataFrame: ...
+
+    @overload
+    def load_table_from_warehouse(
+        self,
+        table_name: str,
+        warehouse_name: str,
+        *,
+        schema: str | None = "dbo",
+        workspace_id: str | None = None,
+        as_: Literal["polars"],
+    ) -> pl.DataFrame: ...
+
+    def load_table_from_warehouse(
+        self,
+        table_name: str,
+        warehouse_name: str,
+        *,
+        schema: str | None = "dbo",
+        workspace_id: str | None = None,
+        as_: DfKind = "spark",
+    ) -> OutputFrame: ...
+
     def write_table(
         self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite"
     ) -> None: ...

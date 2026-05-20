@@ -20,6 +20,8 @@ def mock_spark():
     spark.read = reader
     reader.table.return_value = MagicMock()
     reader.parquet.return_value = MagicMock()
+    reader.option.return_value = reader
+    reader.synapsesql.return_value = MagicMock()
     spark.catalog.tableExists.return_value = True
     return spark
 
@@ -71,6 +73,61 @@ class TestFabricDefaultLakehouse:
         mock_spark.read.table.assert_called_once_with("marketing.products")
         from_spark.assert_called_once()
         assert result == "result"
+
+    @patch("laken.fabric._get_current_spark_session")
+    @patch("laken.fabric._fabric_constants")
+    @patch("laken.fabric.FabricLakehouse._notebookutils")
+    def test_load_table_from_warehouse(
+        self,
+        mock_nu_fn,
+        mock_constants_fn,
+        mock_spark_fn,
+        mock_spark,
+        mock_notebookutils,
+    ):
+        constants = MagicMock()
+        constants.WorkspaceId = "workspace-id-option"
+        mock_constants_fn.return_value = constants
+        mock_spark_fn.return_value = mock_spark
+        mock_nu_fn.return_value = mock_notebookutils
+        lh = FabricLakehouse()
+        with patch("laken.fabric.from_spark", return_value="result") as from_spark:
+            result = lh.load_table_from_warehouse(
+                "orders",
+                "SalesWarehouse",
+                as_="pandas",
+            )
+        mock_spark.read.option.assert_called_once_with("workspace-id-option", "ws-id-123")
+        mock_spark.read.synapsesql.assert_called_once_with("SalesWarehouse.dbo.orders")
+        from_spark.assert_called_once_with(mock_spark.read.synapsesql.return_value, "pandas")
+        assert result == "result"
+
+    @patch("laken.fabric._get_current_spark_session")
+    @patch("laken.fabric._fabric_constants")
+    @patch("laken.fabric.FabricLakehouse._notebookutils")
+    def test_load_table_from_warehouse_custom_workspace_without_schema(
+        self,
+        mock_nu_fn,
+        mock_constants_fn,
+        mock_spark_fn,
+        mock_spark,
+        mock_notebookutils,
+    ):
+        constants = MagicMock()
+        constants.WorkspaceId = "workspace-id-option"
+        mock_constants_fn.return_value = constants
+        mock_spark_fn.return_value = mock_spark
+        mock_nu_fn.return_value = mock_notebookutils
+        lh = FabricLakehouse()
+        with patch("laken.fabric.from_spark", return_value="result"):
+            lh.load_table_from_warehouse(
+                "orders",
+                "SalesWarehouse",
+                schema=None,
+                workspace_id="custom-ws",
+            )
+        mock_spark.read.option.assert_called_once_with("workspace-id-option", "custom-ws")
+        mock_spark.read.synapsesql.assert_called_once_with("SalesWarehouse.orders")
 
     @patch("laken.fabric._get_current_spark_session")
     @patch("laken.fabric.to_spark")

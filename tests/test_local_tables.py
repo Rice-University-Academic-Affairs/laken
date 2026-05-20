@@ -15,6 +15,15 @@ class TestLocalTables:
         result = lakehouse.read_table("marketing.products", as_=df_kind)
         assert kind_of(result) == df_kind
 
+    def test_load_table_from_warehouse_reads_file(self, lakehouse, sample_df, df_kind):
+        lakehouse.write_file(sample_df, "warehouse/products.parquet")
+        result = lakehouse.load_table_from_warehouse(
+            "warehouse/products.parquet",
+            "SalesWarehouse",
+            as_=df_kind,
+        )
+        assert kind_of(result) == df_kind
+
     def test_overwrite_resets(self, lakehouse, sample_pandas):
         lakehouse.write_table(sample_pandas, "products")
         replacement = pd.DataFrame({"id": [99], "value": ["z"]})
