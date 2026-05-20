@@ -18,9 +18,10 @@ cp .env.example .env
 laken deploy
 ```
 
-`laken deploy` builds the caller's wheel with `uv build`, uploads the wheel from `dist/`
-to the configured Fabric environment staging area, and submits publish (HTTP 200 upload,
-HTTP 202 publish accepted).
+`laken deploy` clears `dist/`, builds the caller's wheel once with `uv build`, uploads the
+single matching wheel from `dist/` to the configured Fabric environment staging area, and
+submits publish (HTTP 200 upload, HTTP 202 publish accepted). The command does not poll for
+publish completion.
 
 Required configuration can be supplied in `.env` or through the process environment:
 
@@ -38,17 +39,19 @@ Use flags to override the Fabric target without changing `.env`:
 laken deploy --workspace-id <workspace-id> --environment-id <environment-id>
 ```
 
-For CI, split build and upload:
+For CI, provide configuration through environment variables and run deploy:
 
 ```bash
-laken build
-laken upload
+export AZURE_TENANT_ID=<tenant-id>
+export AZURE_CLIENT_ID=<client-id>
+export AZURE_CLIENT_SECRET=<client-secret>
+export FABRIC_WORKSPACE_ID=<workspace-id>
+export FABRIC_ENVIRONMENT_ID=<environment-id>
+laken deploy
 ```
 
-- Static `[project].version` in `pyproject.toml` — `laken upload` / `laken deploy` require a
-  matching wheel in `dist/` (run `laken build` after changing the version).
-- No static version (including `dynamic = ["version"]`) — uses the newest matching wheel in
-  `dist/`; the reported version comes from the wheel filename.
+- `laken deploy` clears `dist/`, builds once, and uploads the single wheel matching
+  `[project].name`; the version shown in success output comes from the built wheel filename.
 
 Caller repos should contain one application package and run commands from the directory
 containing `pyproject.toml`. Fabric must already have a compatible Python and Spark

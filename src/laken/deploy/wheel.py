@@ -25,7 +25,7 @@ def _parse_wheel(wheel: Path) -> tuple[str, Version] | None:
 def _collect_matches(project_name: str) -> list[tuple[Version, Path]]:
     dist = Path.cwd() / "dist"
     if not dist.is_dir():
-        raise FileNotFoundError("dist/ does not exist; run laken build first")
+        return []
 
     normalized_name = _normalize_name(project_name)
     matches: list[tuple[Version, Path]] = []
@@ -37,24 +37,17 @@ def _collect_matches(project_name: str) -> list[tuple[Version, Path]]:
         if _normalize_name(distribution) == normalized_name:
             matches.append((version, wheel))
 
-    if not matches:
-        raise FileNotFoundError(f"No wheel for project {project_name!r} found in dist/")
     return matches
 
 
-def resolve_wheel(project_name: str, project_version: str | None = None) -> tuple[Path, Version]:
+def resolve_wheel(project_name: str) -> tuple[Path, Version]:
     matches = _collect_matches(project_name)
-    target = Version(project_version) if project_version else max(v for v, _ in matches)
-    wheels = [path for v, path in matches if v == target]
-    if not wheels:
-        found = ", ".join(str(v) for v, _ in matches)
-        raise RuntimeError(
-            f"No wheel for {project_name!r} version {project_version!r} in dist/ "
-            f"(found: {found}); run laken build"
+    if not matches:
+        raise FileNotFoundError(
+            f"dist/ missing or no wheel for project {project_name!r}; run laken deploy"
         )
-    if len(wheels) > 1:
-        names = ", ".join(wheel.name for wheel in wheels)
-        raise RuntimeError(
-            f"Multiple wheels found for {project_name!r} {target}: {names}"
-        )
-    return wheels[0], target
+    if len(matches) > 1:
+        names = ", ".join(path.name for _, path in matches)
+        raise RuntimeError(f"Multiple wheels found for {project_name!r}: {names}")
+    version, wheel = matches[0]
+    return wheel, version

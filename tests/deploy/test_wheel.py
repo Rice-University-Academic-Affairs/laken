@@ -6,50 +6,25 @@ from laken.deploy.wheel import resolve_wheel
 def test_resolves_matching_wheel(monkeypatch, tmp_path):
     dist = tmp_path / "dist"
     dist.mkdir()
-    expected = dist / "my_app-0.2.0-py3-none-any.whl"
-    (dist / "my_app-0.1.0-py3-none-any.whl").write_text("")
-    expected.write_text("")
-    monkeypatch.chdir(tmp_path)
-
-    wheel_path, version = resolve_wheel("my-app")
-    assert wheel_path == expected
-    assert str(version) == "0.2.0"
-
-
-def test_picks_highest_pep440_version(monkeypatch, tmp_path):
-    dist = tmp_path / "dist"
-    dist.mkdir()
-    expected = dist / "my_app-0.10.0-py3-none-any.whl"
-    (dist / "my_app-0.9.0-py3-none-any.whl").write_text("")
-    expected.write_text("")
-    monkeypatch.chdir(tmp_path)
-
-    wheel_path, version = resolve_wheel("my-app")
-    assert wheel_path == expected
-    assert str(version) == "0.10.0"
-
-
-def test_project_version_pins_wheel(monkeypatch, tmp_path):
-    dist = tmp_path / "dist"
-    dist.mkdir()
     expected = dist / "my_app-0.1.0-py3-none-any.whl"
-    (dist / "my_app-0.2.0-py3-none-any.whl").write_text("")
+    (dist / "other-0.2.0-py3-none-any.whl").write_text("")
     expected.write_text("")
     monkeypatch.chdir(tmp_path)
 
-    wheel_path, version = resolve_wheel("my-app", "0.1.0")
+    wheel_path, version = resolve_wheel("my-app")
     assert wheel_path == expected
     assert str(version) == "0.1.0"
 
 
-def test_version_mismatch_raises(monkeypatch, tmp_path):
+def test_multiple_wheels_raise(monkeypatch, tmp_path):
     dist = tmp_path / "dist"
     dist.mkdir()
     (dist / "my_app-0.1.0-py3-none-any.whl").write_text("")
+    (dist / "my_app-0.2.0-py3-none-any.whl").write_text("")
     monkeypatch.chdir(tmp_path)
 
-    with pytest.raises(RuntimeError, match="0.2.0"):
-        resolve_wheel("my-app", "0.2.0")
+    with pytest.raises(RuntimeError, match="my_app-0.1.0-py3-none-any.whl"):
+        resolve_wheel("my-app")
 
 
 def test_skips_invalid_wheel_filename(monkeypatch, tmp_path):
