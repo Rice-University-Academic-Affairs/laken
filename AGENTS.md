@@ -50,7 +50,7 @@ uv sync
 - **Correct:** `bin/`, `lib/python3.11/site-packages/`, `pyvenv.cfg` with a Linux (or WSL) Python path.
 - **Wrong for this repo:** `Lib/`, `Scripts/`, `cpython-*-windows-*` in `pyvenv.cfg` — created when something runs **native Windows** `uv` on `C:\...`. That breaks WSL workflows and causes `lib64` / access-denied errors on the next sync.
 - **Agents must not** delete or recreate `.venv` when sync fails. Report the error instead.
-- **Agents on a Windows host** must run `uv` only via WSL (`wsl -e bash -lc 'cd /mnt/c/.../laken && uv ...'`) or the Python wrappers in `.cursor/scripts/`. Do not use PowerShell `uv sync` / `uv run`.
+- **Agents on a Windows host** must run `uv` only via WSL (`wsl -e bash -lc 'cd /mnt/c/.../laken && uv ...'`). Do not use PowerShell `uv sync` / `uv run`.
 
 ## Common commands
 
@@ -65,23 +65,7 @@ Use `uv run` so tools run inside the project venv. Do not use bare `pytest`, `ru
 | Format (optional fix) | `uv run ruff format` |
 | Build wheel | `uv build` |
 
-Cursor skills with step-by-step workflows: `.cursor/skills/` (`sync-dev-env`, `run-tests`, `run-lint`, `build-package`). Invoke with `/skill-name` or let Agent pick them up from context.
-
-Optional wrappers: `.cursor/scripts/` (`sync_dev_env.py`, `run_tests.py`, `run_lint.py`, `build_package.py`) resolve the repo root and run `uv` there. On Linux, Cursor Cloud, macOS, and WSL they run `uv` directly; when launched with Windows Python, they route through WSL.
-
-Linux / WSL example:
-
-```bash
-uv run python .cursor/scripts/run_tests.py tests/deploy -q
-```
-
-PowerShell example:
-
-```powershell
-python .cursor\scripts\run_tests.py tests/deploy -q
-```
-
-Do not prefix the wrappers with Windows `uv` from PowerShell.
+Cursor skills with step-by-step workflows: `.cursor/skills/` (`sync-dev-env`, `run-tests`, `run-lint`, `build-package`). Invoke with `/skill-name` or let Agent pick them up from context. These skills use the same Bash commands shown above; no Python wrapper scripts are needed.
 
 ## Secrets and integration
 

@@ -23,8 +23,8 @@ This repo uses a **Unix-style** `.venv` (`bin/`, `lib/`, often `lib64/` on Linux
 
 - Use WSL bash for all `uv` commands. A typical path is `/mnt/c/Users/.../laken`.
 - From Windows automation, use WSL: `wsl -e bash -lc 'cd /mnt/c/.../laken && uv ...'`.
-- Never run `uv sync`, `uv run`, or `uv run python .cursor/scripts/...` from PowerShell on `C:\...`; native Windows `uv` can replace the Unix `.venv`.
-- `.cursor/scripts/*.py` call WSL when launched with Windows Python. On Linux or WSL, prefer direct `uv run ...` commands unless the wrapper is convenient.
+- Never run `uv sync` or `uv run` from PowerShell on `C:\...`; native Windows `uv` can replace the Unix `.venv`.
+- On Linux, Cursor Cloud, and WSL, prefer direct Bash commands such as `uv run pytest`.
 
 ## Virtual environment — do not destroy
 

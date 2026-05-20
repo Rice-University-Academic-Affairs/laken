@@ -30,16 +30,6 @@ uv sync
 
 3. Confirm `.venv` has `bin/` and `lib/` (Unix layout), not `Scripts/` + `Lib/`.
 
-### Optional script
-
-The direct command above is preferred. If a Windows automation shell needs a Python wrapper, use:
-
-```powershell
-python .cursor\scripts\sync_dev_env.py
-```
-
-That routes through WSL without invoking Windows `uv`.
-
 ## If `uv sync` fails
 
 Stop. **Do not** delete `.venv` unless the user explicitly asks.
