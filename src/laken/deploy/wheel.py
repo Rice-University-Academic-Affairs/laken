@@ -25,7 +25,7 @@ def _parse_wheel(wheel: Path) -> tuple[str, Version] | None:
 def _collect_matches(project_name: str) -> list[tuple[Version, Path]]:
     dist = Path.cwd() / "dist"
     if not dist.is_dir():
-        raise FileNotFoundError("dist/ does not exist; run laken build first")
+        raise FileNotFoundError("dist/ does not exist; run laken deploy from a project root")
 
     normalized_name = _normalize_name(project_name)
     matches: list[tuple[Version, Path]] = []
@@ -50,7 +50,7 @@ def resolve_wheel(project_name: str, project_version: str | None = None) -> tupl
         found = ", ".join(str(v) for v, _ in matches)
         raise RuntimeError(
             f"No wheel for {project_name!r} version {project_version!r} in dist/ "
-            f"(found: {found}); run laken build"
+            f"(found: {found}); check the project version and run laken deploy"
         )
     if len(wheels) > 1:
         names = ", ".join(wheel.name for wheel in wheels)
