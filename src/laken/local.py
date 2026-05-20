@@ -7,22 +7,59 @@ import pandas as pd
 import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
+from deltalake import DeltaTable, write_deltalake
 from pyspark.sql import DataFrame as SparkDataFrame
 
 from laken.frames import from_arrow, to_arrow
 from laken.paths import format_table_name, parse_table_name
 from laken.types import DfKind, InputFrame, WriteMode
+from laken.workspace import (
+    DEFAULT_SAMPLE_ROWS,
+    MAX_FULL_CACHE_BYTES,
+    FabricTableFetcher,
+    FabricTableInfo,
+    TableMetadataStore,
+    display_path,
+    utc_timestamp,
+)
 
 
 class LocalLakehouse:
-    def __init__(self, root: str | os.PathLike = "./lakehouse"):
+    def __init__(
+        self,
+        root: str | os.PathLike = ".laken/workspace",
+        *,
+        metadata_path: str | os.PathLike | None = None,
+        fabric_fetcher: FabricTableFetcher | None = None,
+        max_full_cache_bytes: int = MAX_FULL_CACHE_BYTES,
+        sample_rows: int = DEFAULT_SAMPLE_ROWS,
+    ):
         self._root = Path(root).resolve()
+        self._fabric_fetcher = fabric_fetcher
+        self._max_full_cache_bytes = max_full_cache_bytes
+        self._sample_rows = sample_rows
+        self._metadata = TableMetadataStore(
+            metadata_path if metadata_path is not None else self._default_metadata_path()
+        )
         (self._root / "Files").mkdir(parents=True, exist_ok=True)
         (self._root / "Tables").mkdir(parents=True, exist_ok=True)
 
+    def _default_metadata_path(self) -> Path:
+        if self._root.name == "workspace":
+            return self._root.parent / "metadata" / "tables.json"
+        return self._root / "metadata" / "tables.json"
+
     def _table_dir(self, name: str) -> Path:
         schema, table = parse_table_name(name)
+        if schema == "dbo":
+            return self._root / "Tables" / table
         return self._root / "Tables" / schema / table
+
+    def _table_key(self, name: str) -> str:
+        schema, table = parse_table_name(name)
+        if schema == "dbo":
+            return table
+        return format_table_name(schema, table)
 
     def _file_path(self, path: str) -> Path:
         normalized = Path(path)
@@ -30,13 +67,156 @@ class LocalLakehouse:
             raise ValueError(f"invalid file path: {path}")
         return self._root / "Files" / normalized
 
-    def _next_part_path(self, directory: Path) -> Path:
-        existing = sorted(directory.glob("part-*.parquet"))
-        if not existing:
-            return directory / "part-0000.parquet"
-        last = existing[-1].stem.split("-")[-1]
-        next_index = int(last) + 1
-        return directory / f"part-{next_index:04d}.parquet"
+    def _source_from_info(self, info: FabricTableInfo) -> dict:
+        return {
+            "workspace_id": info.workspace_id,
+            "lakehouse_id": info.lakehouse_id,
+            "table": info.table,
+            "delta_version": info.delta_version,
+        }
+
+    def _write_delta_table(self, table_dir: Path, arrow_table: pa.Table) -> None:
+        shutil.rmtree(table_dir, ignore_errors=True)
+        table_dir.parent.mkdir(parents=True, exist_ok=True)
+        write_deltalake(
+            str(table_dir),
+            arrow_table,
+            mode="overwrite",
+            schema_mode="overwrite",
+        )
+
+    def _fetch_and_cache(self, local_name: str, fetch_name: str) -> dict:
+        if self._fabric_fetcher is None:
+            raise FileNotFoundError(f"table not found: {local_name}")
+        info = self._fabric_fetcher.inspect_table(fetch_name)
+        table_dir = self._table_dir(local_name)
+        key = self._table_key(local_name)
+        size_bytes = info.size_bytes
+        if size_bytes is not None and size_bytes > self._max_full_cache_bytes:
+            print(f"laken: {key} is too large to cache in full.")
+            print(f"laken: cached a {self._sample_rows:,}-row development sample instead.")
+            arrow_table = self._fabric_fetcher.fetch_table(fetch_name, limit=self._sample_rows)
+            self._write_delta_table(table_dir, arrow_table)
+            entry = {
+                "state": "sample",
+                "path": display_path(table_dir),
+                "source": self._source_from_info(info),
+                "cache": {
+                    "mode": "sample",
+                    "sample_rows": self._sample_rows,
+                    "fetched_at": utc_timestamp(),
+                },
+            }
+            self._metadata.upsert(key, entry)
+            return entry
+        print(f"laken: fetching {key} from Fabric...")
+        arrow_table = self._fabric_fetcher.fetch_table(fetch_name, limit=None)
+        self._write_delta_table(table_dir, arrow_table)
+        row_count = info.row_count if info.row_count is not None else arrow_table.num_rows
+        entry = {
+            "state": "mirror",
+            "path": display_path(table_dir),
+            "source": self._source_from_info(info),
+            "cache": {
+                "mode": "full",
+                "fetched_at": utc_timestamp(),
+                "row_count": row_count,
+                "size_bytes": size_bytes,
+            },
+        }
+        self._metadata.upsert(key, entry)
+        print(f"laken: cached {key} locally as a Delta table.")
+        return entry
+
+    def _hydrate_table(self, name: str) -> None:
+        self._fetch_and_cache(name, name)
+
+    def _warn_about_cached_table(self, name: str) -> None:
+        key = self._table_key(name)
+        entry = self._metadata.table(key)
+        if entry is None or entry.get("state") not in {"mirror", "sample"}:
+            return
+        if entry.get("state") == "sample":
+            sample_rows = entry.get("cache", {}).get("sample_rows", self._sample_rows)
+            print(f"laken: {key} is using a {sample_rows:,}-row development sample.")
+        if self._fabric_fetcher is None:
+            return
+        source = entry.get("source", {})
+        try:
+            current = self._fabric_fetcher.inspect_table(source.get("table", name))
+        except Exception:
+            print(f"laken: could not check Fabric freshness. Using local cached {key}.")
+            return
+        cached_version = source.get("delta_version")
+        if cached_version is not None and current.delta_version != cached_version:
+            print(f"laken: {key} is cached from Fabric version {cached_version}.")
+            print(f"laken: Fabric is now at version {current.delta_version}.")
+            print(
+                f"laken: using the local cached version. "
+                f"Run `laken refresh {key}` to update."
+            )
+
+    def refresh_table(self, name: str) -> None:
+        key = self._table_key(name)
+        entry = self._metadata.table(key)
+        if entry is None:
+            raise FileNotFoundError(f"table not found: {name}")
+        if entry.get("state") == "local":
+            print(f"laken: {key} is local-only and has no Fabric source to refresh.")
+            return
+        source = entry.get("source")
+        if source is None:
+            raise ValueError(f"table has no Fabric source: {key}")
+        refreshed = self._fetch_and_cache(name, source.get("table", name))
+        version = refreshed.get("source", {}).get("delta_version")
+        print(f"laken: refreshed {key} from Fabric version {version}.")
+
+    def reset_table(self, name: str) -> None:
+        key = self._table_key(name)
+        entry = self._metadata.table(key)
+        if entry is None or entry.get("source") is None:
+            raise ValueError(f"laken: {key} has no Fabric source to reset.")
+        source = entry["source"]
+        reset = self._fetch_and_cache(name, source.get("table", name))
+        version = reset.get("source", {}).get("delta_version")
+        print(f"laken: reset {key} to Fabric version {version}.")
+
+    def status(self) -> list[dict[str, str]]:
+        rows: list[dict[str, str]] = []
+        for key, entry in sorted(self._metadata.tables().items()):
+            state = str(entry.get("state", "local"))
+            source = entry.get("source", {})
+            version = source.get("delta_version")
+            notes = self._status_notes(key, entry)
+            rows.append(
+                {
+                    "table": key,
+                    "state": state,
+                    "source_version": str(version) if version is not None else "-",
+                    "notes": notes,
+                }
+            )
+        return rows
+
+    def _status_notes(self, key: str, entry: dict) -> str:
+        state = entry.get("state")
+        if state == "local":
+            return "local-only"
+        notes = []
+        if state == "sample":
+            sample_rows = entry.get("cache", {}).get("sample_rows", self._sample_rows)
+            notes.append(f"{sample_rows:,}-row sample")
+        source = entry.get("source", {})
+        cached_version = source.get("delta_version")
+        if self._fabric_fetcher is not None and cached_version is not None:
+            try:
+                current = self._fabric_fetcher.inspect_table(source.get("table", key))
+            except Exception:
+                notes.append("freshness unknown")
+            else:
+                if current.delta_version != cached_version:
+                    notes.append(f"stale: Fabric is {current.delta_version}")
+        return ", ".join(notes)
 
     @overload
     def read_table(self, name: str, *, as_: Literal["spark"] = "spark") -> SparkDataFrame: ...
@@ -51,10 +231,10 @@ class LocalLakehouse:
         self, name: str, *, as_: DfKind = "spark"
     ) -> SparkDataFrame | pd.DataFrame | pl.DataFrame:
         table_dir = self._table_dir(name)
-        if not table_dir.is_dir():
-            raise FileNotFoundError(f"table not found: {name}")
-        dataset = pq.ParquetDataset(table_dir)
-        return from_arrow(dataset.read(), as_)
+        if not (table_dir / "_delta_log").is_dir():
+            self._hydrate_table(name)
+        self._warn_about_cached_table(name)
+        return from_arrow(DeltaTable(str(table_dir)).to_pyarrow_table(), as_)
 
     @overload
     def load_table_from_warehouse(
@@ -105,32 +285,59 @@ class LocalLakehouse:
     ) -> None:
         table_dir = self._table_dir(name)
         arrow_table = to_arrow(df)
-        if mode == "overwrite":
+        key = self._table_key(name)
+        existing = self._metadata.table(key)
+        source = existing.get("source") if existing is not None else None
+        created_at = existing.get("created_at") if existing is not None else None
+        if existing is not None and existing.get("state") in {"mirror", "sample"}:
+            print(f"laken: {key} was a Fabric-backed mirror.")
+            print(
+                "laken: this write converts it to a local table. "
+                "It will not be refreshed from Fabric unless reset."
+            )
+        if mode == "overwrite" or not (table_dir / "_delta_log").is_dir():
             shutil.rmtree(table_dir, ignore_errors=True)
-            table_dir.mkdir(parents=True, exist_ok=True)
-            pq.write_table(arrow_table, table_dir / "part-0000.parquet")
-            return
-        table_dir.mkdir(parents=True, exist_ok=True)
-        pq.write_table(arrow_table, self._next_part_path(table_dir))
+            table_dir.parent.mkdir(parents=True, exist_ok=True)
+            write_deltalake(
+                str(table_dir),
+                arrow_table,
+                mode="overwrite",
+                schema_mode="overwrite",
+            )
+        else:
+            table_dir.parent.mkdir(parents=True, exist_ok=True)
+            write_deltalake(str(table_dir), arrow_table, mode="append")
+        entry = {
+            "state": "local",
+            "path": display_path(table_dir),
+            "created_at": created_at or utc_timestamp(),
+        }
+        if source is not None:
+            entry["source"] = source
+        self._metadata.upsert(key, entry)
 
     def list_tables(self) -> list[str]:
         tables_root = self._root / "Tables"
         names: list[str] = []
         if not tables_root.is_dir():
             return names
-        for schema_dir in sorted(tables_root.iterdir()):
-            if not schema_dir.is_dir():
+        for item in sorted(tables_root.iterdir()):
+            if not item.is_dir():
                 continue
-            for table_dir in sorted(schema_dir.iterdir()):
-                if table_dir.is_dir() and any(table_dir.glob("*.parquet")):
-                    names.append(format_table_name(schema_dir.name, table_dir.name))
-        return names
+            if (item / "_delta_log").is_dir():
+                names.append(format_table_name("dbo", item.name))
+                continue
+            for table_dir in sorted(item.iterdir()):
+                if table_dir.is_dir() and (table_dir / "_delta_log").is_dir():
+                    names.append(format_table_name(item.name, table_dir.name))
+        return sorted(names)
 
     def table_exists(self, name: str) -> bool:
-        return self._table_dir(name).is_dir()
+        return (self._table_dir(name) / "_delta_log").is_dir()
 
     def drop_table(self, name: str) -> None:
         shutil.rmtree(self._table_dir(name), ignore_errors=True)
+        self._metadata.remove(self._table_key(name))
 
     @overload
     def read_file(self, path: str, *, as_: Literal["spark"] = "spark") -> SparkDataFrame: ...

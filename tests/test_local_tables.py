@@ -9,6 +9,7 @@ class TestLocalTables:
         lakehouse.write_table(sample_df, "products")
         result = lakehouse.read_table("products", as_=df_kind)
         assert kind_of(result) == df_kind
+        assert (lakehouse._table_dir("products") / "_delta_log").is_dir()
 
     def test_write_read_schema(self, lakehouse, sample_df, df_kind):
         lakehouse.write_table(sample_df, "marketing.products")
@@ -37,6 +38,11 @@ class TestLocalTables:
         lakehouse.write_table(extra, "products", mode="append")
         result = lakehouse.read_table("products", as_="pandas")
         assert len(result) == 3
+
+    def test_append_creates_missing_table(self, lakehouse, sample_pandas):
+        lakehouse.write_table(sample_pandas, "products", mode="append")
+        result = lakehouse.read_table("products", as_="pandas")
+        assert len(result) == 2
 
     def test_list_tables_sorted(self, lakehouse, sample_pandas):
         lakehouse.write_table(sample_pandas, "products")

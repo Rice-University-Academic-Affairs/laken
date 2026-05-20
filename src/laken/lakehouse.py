@@ -9,6 +9,7 @@ from laken.fabric import FabricLakehouse
 from laken.local import LocalLakehouse
 from laken.protocol import LakehouseProtocol
 from laken.types import DfKind, InputFrame, OutputFrame, WriteMode
+from laken.workspace import DEFAULT_SAMPLE_ROWS, MAX_FULL_CACHE_BYTES, FabricTableFetcher
 
 
 def _is_fabric_context() -> bool:
@@ -30,10 +31,14 @@ class Lakehouse:
     def __init__(
         self,
         *,
-        root: str | os.PathLike = "./lakehouse",
+        root: str | os.PathLike = ".laken/workspace",
         lakehouse: str | None = None,
         workspace_id: str | None = None,
         workspace_name: str | None = None,
+        metadata_path: str | os.PathLike | None = None,
+        fabric_fetcher: FabricTableFetcher | None = None,
+        max_full_cache_bytes: int = MAX_FULL_CACHE_BYTES,
+        sample_rows: int = DEFAULT_SAMPLE_ROWS,
     ):
         if _is_fabric_context():
             self._implementation: LakehouseProtocol = FabricLakehouse(
@@ -42,7 +47,13 @@ class Lakehouse:
                 workspace_name=workspace_name,
             )
             return
-        self._implementation = LocalLakehouse(root=root)
+        self._implementation = LocalLakehouse(
+            root=root,
+            metadata_path=metadata_path,
+            fabric_fetcher=fabric_fetcher,
+            max_full_cache_bytes=max_full_cache_bytes,
+            sample_rows=sample_rows,
+        )
 
     @overload
     def read_table(self, name: str, *, as_: Literal["spark"] = "spark") -> SparkDataFrame: ...
@@ -119,6 +130,24 @@ class Lakehouse:
 
     def drop_table(self, name: str) -> None:
         self._implementation.drop_table(name)
+
+    def refresh_table(self, name: str) -> None:
+        refresh = getattr(self._implementation, "refresh_table", None)
+        if not callable(refresh):
+            raise RuntimeError("refresh_table is only available in local mode")
+        refresh(name)
+
+    def reset_table(self, name: str) -> None:
+        reset = getattr(self._implementation, "reset_table", None)
+        if not callable(reset):
+            raise RuntimeError("reset_table is only available in local mode")
+        reset(name)
+
+    def status(self) -> list[dict[str, str]]:
+        status = getattr(self._implementation, "status", None)
+        if not callable(status):
+            raise RuntimeError("status is only available in local mode")
+        return status()
 
     @overload
     def read_file(self, path: str, *, as_: Literal["spark"] = "spark") -> SparkDataFrame: ...
