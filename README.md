@@ -13,8 +13,6 @@ uv add laken
 Install `uv`, then run `laken` from the root of the application repo you want to deploy:
 
 ```bash
-cd myapp
-cp .env.example .env
 laken deploy
 ```
 
@@ -108,7 +106,7 @@ lh.read_table("marketing.products", as_="pandas")
 
 ## Development
 
-AI/agent setup: see [AGENTS.md](AGENTS.md). Cursor Cloud and Linux shells use `uv` directly from the repo root. On Windows, use **WSL** at `/mnt/c/.../laken` for `uv sync` / `uv run` — do not run Windows `uv` from PowerShell against `C:\...\laken`.
+See [AGENTS.md](AGENTS.md) for agent and environment setup (uv, WSL, `.venv`).
 
 ```bash
 uv sync

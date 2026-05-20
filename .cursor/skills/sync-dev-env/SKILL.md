@@ -13,9 +13,8 @@ description: Install or refresh the laken dev environment with uv sync. Use when
 
 ## Prerequisites
 
-- [uv](https://docs.astral.sh/uv/) installed on `PATH`
-- Repo root as cwd (`pyproject.toml`, `uv.lock` present)
-- Linux/Cursor Cloud: use the native shell; Windows hosts: use WSL bash
+- Repo root as cwd; [uv](https://docs.astral.sh/uv/) on `PATH`
+- Bash on Linux, Cursor Cloud, or WSL (not PowerShell `uv` on `C:\...`)
 - Never delete or recreate `.venv` unless the user explicitly asks
 
 ## Steps

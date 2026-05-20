@@ -15,7 +15,7 @@ description: Lint laken Python sources with Ruff via uv. Use for style checks, i
 
 - Repo root as cwd
 - Dev env synced; run `sync-dev-env` first if this is the first use, dependencies changed, or Ruff is missing
-- Linux/Cursor Cloud: use the native shell; Windows hosts: use WSL bash
+- Bash on Linux, Cursor Cloud, or WSL (see AGENTS.md)
 
 ## Steps
 
