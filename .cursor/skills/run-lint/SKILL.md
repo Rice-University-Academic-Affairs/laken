@@ -13,8 +13,10 @@ description: Lint laken Python sources with Ruff via uv. Use for style checks, i
 
 ## Prerequisites
 
-- Repo root as cwd in **WSL bash** (on Windows: `/mnt/c/.../laken`, not PowerShell)
-- Dev env synced: `uv sync` in WSL (run first if unsure)
+- Repo root as cwd
+- Dev env synced: `uv sync` (run first if unsure)
+- Cursor Cloud and Linux CI: use native Linux shell
+- Windows hosts: use WSL bash for direct `uv` commands, not PowerShell
 
 ## Steps
 
@@ -38,23 +40,23 @@ uv run ruff format
 
 Re-run `uv run ruff check` after format if needed.
 
-### Optional script (WSL on Windows)
+### Optional script
 
-From repo root. On Windows hosts, `.cursor/scripts/run_lint.py` runs `uv` inside WSL automatically.
+From repo root. The direct `uv run ruff ...` commands above are preferred on Linux, Cursor Cloud, macOS, and WSL. `.cursor/scripts/run_lint.py` is a small Python wrapper that resolves the repo root; when launched with Windows Python, it runs `uv` inside WSL automatically.
 
-In WSL bash:
+Linux / WSL:
 
 ```bash
 uv run python .cursor/scripts/run_lint.py
 ```
 
-From Windows PowerShell:
+Windows PowerShell:
 
-```bash
-wsl -e bash -lc "cd '/mnt/c/Users/codya/Desktop/Projects/laken' && uv run ruff check"
+```powershell
+python .cursor\scripts\run_lint.py
 ```
 
-Prefer `uv run ruff` directly in WSL when already in bash.
+Do not prefix the wrapper with Windows `uv`.
 
 ## Success criteria
 

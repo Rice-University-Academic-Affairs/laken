@@ -13,8 +13,10 @@ description: Run the laken test suite with uv and pytest. Use when verifying cod
 
 ## Prerequisites
 
-- Repo root as cwd in **WSL bash** (on Windows: `/mnt/c/.../laken`, not PowerShell)
-- Dev env synced: `uv sync` in WSL (run first if unsure)
+- Repo root as cwd
+- Dev env synced: `uv sync` (run first if unsure)
+- Cursor Cloud and Linux CI: use native Linux shell
+- Windows hosts: use WSL bash for direct `uv` commands, not PowerShell
 
 ## Steps
 
@@ -51,29 +53,29 @@ uv run pytest tests/test_fabric_lakehouse.py -q
 uv run pytest tests/deploy/test_wheel.py -q
 ```
 
-**Extra pytest args** — pass after `--`:
+**Extra pytest args:**
 
 ```bash
-uv run pytest tests/deploy -q -- -k test_resolve
+uv run pytest tests/deploy -q -k test_resolve
 ```
 
-### Optional script (WSL on Windows)
+### Optional script
 
-From repo root. On Windows hosts, `.cursor/scripts/run_tests.py` runs `uv` inside WSL automatically.
+From repo root. The direct `uv run pytest` commands above are preferred on Linux, Cursor Cloud, macOS, and WSL. `.cursor/scripts/run_tests.py` is a small Python wrapper that resolves the repo root; when launched with Windows Python, it runs `uv` inside WSL automatically.
 
-In WSL bash:
+Linux / WSL:
 
 ```bash
 uv run python .cursor/scripts/run_tests.py tests/deploy -q
 ```
 
-From Windows PowerShell (do **not** use `uv run python` — Windows uv breaks the venv):
+Windows PowerShell:
 
-```bash
-wsl -e bash -lc "cd '/mnt/c/Users/codya/Desktop/Projects/laken' && uv run pytest tests/deploy -q"
+```powershell
+python .cursor\scripts\run_tests.py tests/deploy -q
 ```
 
-Prefer `uv run pytest` directly in WSL when already in bash.
+Do not prefix the wrapper with Windows `uv`.
 
 ## Success criteria
 

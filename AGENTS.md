@@ -28,24 +28,29 @@ tests/conftest.py       # shared fixtures (lakehouse, sample_df, …)
 
 ## Environment
 
-- Install [uv](https://docs.astral.sh/uv/) in **WSL** (primary dev environment).
-- Python **3.11** (see `.python-version`).
-- Repo on disk: `C:\Users\...\laken` → use WSL path `/mnt/c/Users/.../laken` for all commands.
-- On first use or after dependency changes, from **WSL bash** at repo root:
+- Cursor Cloud and Linux CI run native Linux. From the repo root (`pyproject.toml`, `uv.lock` present), use `uv` directly:
 
 ```bash
 uv sync
 ```
 
-Dev tools (`pytest`, `ruff`) are in `[dependency-groups] dev` — not installed by `pip install laken` alone.
+- Python **3.11** is required (see `.python-version`).
+- Install [uv](https://docs.astral.sh/uv/) on `PATH` in the shell that runs commands.
+- On first use, and after dependency changes, run `uv sync`.
+- Dev tools (`pytest`, `ruff`) are in `[dependency-groups] dev` — not installed by `pip install laken` alone.
+
+### Local Windows hosts
+
+- Use **WSL bash** for `uv sync`, `uv run`, and `uv build`. A typical repo path is `/mnt/c/Users/.../laken`.
+- Do not run `uv` from PowerShell or cmd against `C:\...\laken`; native Windows `uv` can replace the Unix `.venv` layout.
+- `.vscode/settings.json` sets the Windows integrated terminal default to WSL. It is ignored on Linux and Cursor Cloud.
 
 ### `.venv` layout (Unix — required)
 
 - **Correct:** `bin/`, `lib/python3.11/site-packages/`, `pyvenv.cfg` with a Linux (or WSL) Python path.
 - **Wrong for this repo:** `Lib/`, `Scripts/`, `cpython-*-windows-*` in `pyvenv.cfg` — created when something runs **native Windows** `uv` on `C:\...`. That breaks WSL workflows and causes `lib64` / access-denied errors on the next sync.
 - **Agents must not** delete or recreate `.venv` when sync fails. Report the error instead.
-- **Agents on a Windows host** must run `uv` only via WSL (`wsl -e bash -lc '…'`) or `.cursor/scripts/*.py` (WSL-aware). Do not use PowerShell `uv sync` / `uv run`.
-- Cursor terminal default for this workspace: WSL (see `.vscode/settings.json`).
+- **Agents on a Windows host** must run `uv` only via WSL (`wsl -e bash -lc 'cd /mnt/c/.../laken && uv ...'`) or the Python wrappers in `.cursor/scripts/`. Do not use PowerShell `uv sync` / `uv run`.
 
 ## Common commands
 
@@ -62,13 +67,21 @@ Use `uv run` so tools run inside the project venv. Do not use bare `pytest`, `ru
 
 Cursor skills with step-by-step workflows: `.cursor/skills/` (`sync-dev-env`, `run-tests`, `run-lint`, `build-package`). Invoke with `/skill-name` or let Agent pick them up from context.
 
-Optional wrappers: `.cursor/scripts/` (`run_tests.py`, `run_lint.py` — route through WSL on Windows). From PowerShell, do **not** use `uv run python .cursor/...` (Windows uv runs first). Use:
+Optional wrappers: `.cursor/scripts/` (`sync_dev_env.py`, `run_tests.py`, `run_lint.py`, `build_package.py`) resolve the repo root and run `uv` there. On Linux, Cursor Cloud, macOS, and WSL they run `uv` directly; when launched with Windows Python, they route through WSL.
+
+Linux / WSL example:
 
 ```bash
-wsl -e bash -lc "cd '/mnt/c/Users/codya/Desktop/Projects/laken' && uv run python .cursor/scripts/run_tests.py -q"
+uv run python .cursor/scripts/run_tests.py tests/deploy -q
 ```
 
-Or run `uv run pytest` / `uv run ruff` directly inside WSL bash.
+PowerShell example:
+
+```powershell
+python .cursor\scripts\run_tests.py tests/deploy -q
+```
+
+Do not prefix the wrappers with Windows `uv` from PowerShell.
 
 ## Secrets and integration
 

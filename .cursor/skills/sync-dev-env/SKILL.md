@@ -13,13 +13,14 @@ description: Install or refresh the laken dev environment with uv sync. Use when
 
 ## Prerequisites
 
-- [uv](https://docs.astral.sh/uv/) installed in **WSL**
-- Shell: **WSL bash** at repo root (`pyproject.toml`, `uv.lock` present), e.g. `/mnt/c/Users/.../laken`
-- On a Windows host: do **not** run this skill from PowerShell — use WSL or `wsl -e bash -lc 'cd /mnt/c/.../laken && uv sync'`
+- [uv](https://docs.astral.sh/uv/) installed on `PATH`
+- Shell at repo root (`pyproject.toml`, `uv.lock` present)
+- Cursor Cloud and Linux CI: use the native Linux shell, usually `/workspace`
+- Windows hosts: use WSL bash, e.g. `/mnt/c/Users/.../laken`; do not run Windows `uv` from PowerShell or cmd
 
 ## Steps
 
-1. From repo root in WSL:
+1. From repo root:
 
 ```bash
 uv sync
@@ -29,11 +30,21 @@ uv sync
 
 3. Confirm `.venv` has `bin/` and `lib/` (Unix layout), not `Scripts/` + `Lib/`.
 
+### Optional script
+
+The direct command above is preferred. If a Windows automation shell needs a Python wrapper, use:
+
+```powershell
+python .cursor\scripts\sync_dev_env.py
+```
+
+That routes through WSL without invoking Windows `uv`.
+
 ## If `uv sync` fails
 
 Stop. **Do not** delete `.venv` unless the user explicitly asks.
 
-`failed to remove file .venv\lib64` or mixed `Lib`/`lib64` usually means **native Windows `uv`** ran on `C:\...` and conflicted with the WSL venv. Tell the user; they should recreate from WSL only: `rm -rf .venv && uv sync` in bash.
+On Windows hosts, `failed to remove file .venv\lib64` or mixed `Lib`/`lib64` usually means native Windows `uv` ran on `C:\...` and conflicted with the WSL venv. Tell the user; they can recreate from WSL only if they explicitly choose to: `rm -rf .venv && uv sync` in bash.
 
 ## Success criteria
 
