@@ -256,3 +256,42 @@ def test_read_without_fetcher_raises_file_not_found(tmp_path):
     lakehouse = LocalLakehouse(root=tmp_path / ".laken" / "workspace")
     with pytest.raises(FileNotFoundError, match="table not found"):
         lakehouse.read_table("missing", as_="pandas")
+
+
+class TableNotFoundError(Exception):
+    pass
+
+
+def test_hydrate_maps_table_not_found_to_file_not_found(tmp_path):
+    root = tmp_path / ".laken" / "workspace"
+    fetcher = FakeFabricFetcher(inspect_errors={"missing": TableNotFoundError("gone")})
+    lakehouse = LocalLakehouse(root=root, fabric_fetcher=fetcher)
+
+    with pytest.raises(FileNotFoundError, match="table not found: missing"):
+        lakehouse.read_table("missing", as_="pandas")
+
+
+def test_refresh_uses_stored_four_part_source_table(tmp_path):
+    root = tmp_path / ".laken" / "workspace"
+    fetcher = FakeFabricFetcher()
+    fabric_name = "MyWorkspace.Sales_LH.marketing.products"
+    fetcher.add(fabric_name, pa.table({"id": [1]}), version=1, size_bytes=100)
+    lakehouse = LocalLakehouse(
+        root=root,
+        fabric_fetcher=fetcher,
+        workspace_name="MyWorkspace",
+        lakehouse="Sales_LH",
+    )
+
+    lakehouse.read_table("marketing.products", as_="pandas")
+    assert _metadata(root)["marketing.products"]["source"]["table"] == fabric_name
+    fetcher.inspect_names.clear()
+    fetcher.fetch_names.clear()
+    fetcher.limits.clear()
+    fetcher.add(fabric_name, pa.table({"id": [2]}), version=2, size_bytes=100)
+
+    lakehouse.refresh_table("marketing.products")
+
+    assert fetcher.inspect_names == [fabric_name]
+    assert fetcher.fetch_names == [fabric_name]
+    assert _metadata(root)["marketing.products"]["source"]["delta_version"] == 2

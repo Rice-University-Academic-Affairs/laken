@@ -112,3 +112,31 @@ class TestLakehouseLocalOnlyMethods:
 
         assert result["id"].tolist() == [5]
         assert isinstance(lh._implementation, LocalLakehouse)
+
+    @patch("laken.lakehouse.default_fabric_fetcher")
+    def test_lakehouse_hydrates_via_default_fabric_fetcher(self, mock_default, tmp_path):
+        root = tmp_path / ".laken" / "workspace"
+        fetcher = FakeFabricFetcher()
+        fetcher.add(
+            "MyWorkspace.Sales_LH.dbo.remote_table",
+            pa.table({"id": [9]}),
+            version=1,
+            size_bytes=50,
+        )
+        mock_default.return_value = fetcher
+
+        lh = Lakehouse(
+            root=root,
+            lakehouse="Sales_LH",
+            workspace_name="MyWorkspace",
+        )
+
+        result = lh.read_table("remote_table", as_="pandas")
+
+        mock_default.assert_called_once_with(
+            lakehouse="Sales_LH",
+            workspace_id=None,
+            workspace_name="MyWorkspace",
+        )
+        assert result["id"].tolist() == [9]
+        assert lh._implementation._fabric_fetcher is fetcher
