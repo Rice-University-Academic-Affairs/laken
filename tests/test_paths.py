@@ -1,6 +1,6 @@
 import pytest
 
-from laken.paths import format_table_name, parse_table_name
+from laken.paths import format_table_name, parse_table_name, resolve_spark_table_name
 
 
 class TestParseTableName:
@@ -27,6 +27,21 @@ class TestParseTableName:
     def test_whitespace_only_raises(self):
         with pytest.raises(ValueError):
             parse_table_name("   ")
+
+
+class TestResolveSparkTableName:
+    def test_bare_name_passes_through(self):
+        assert resolve_spark_table_name("products") == "products"
+
+    def test_qualified_name_passes_through(self):
+        assert resolve_spark_table_name("marketing.products") == "marketing.products"
+
+    def test_four_part_passes_through(self):
+        name = "MyWorkspace.Sales_LH.marketing.products"
+        assert resolve_spark_table_name(name) == name
+
+    def test_three_part_passes_through(self):
+        assert resolve_spark_table_name("Sales_LH.products") == "Sales_LH.products"
 
 
 class TestFormatTableName:

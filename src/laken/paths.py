@@ -19,6 +19,14 @@ def parse_table_name(name: str) -> tuple[str, str]:
     raise ValueError(f"unsupported table name format: {name}")
 
 
+def resolve_spark_table_name(name: str) -> str:
+    stripped = name.strip()
+    parts = table_name_parts(stripped)
+    if len(parts) in {1, 2, 3, 4}:
+        return stripped
+    raise ValueError(f"unsupported table name format: {name}")
+
+
 def format_table_name(schema: str, table: str) -> str:
     return f"{schema}.{table}"
 

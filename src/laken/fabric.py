@@ -11,6 +11,7 @@ from laken.paths import (
     format_table_name,
     is_four_part_table_name,
     parse_table_name,
+    resolve_spark_table_name,
 )
 from laken.types import DfKind, InputFrame, WriteMode
 
@@ -69,8 +70,7 @@ class FabricLakehouse:
     def _resolve_table_name(self, name: str) -> str:
         stripped = name.strip()
         if not self._explicit_lakehouse:
-            schema, table = parse_table_name(stripped)
-            return format_table_name(schema, table)
+            return resolve_spark_table_name(stripped)
         self._require_cross_lakehouse_context()
         if is_four_part_table_name(stripped):
             return stripped
