@@ -3,9 +3,12 @@
 The missing local development workflow for Microsoft Fabric.
 
 laken lets you develop Python code for Fabric locally, using the tooling you already trust.
+
 Write local code against real lakehouse data. The same code runs in Fabric without modification.
+
 When you're ready, `laken deploy` packages your project, publishes it to Fabric, and makes it
 available to your Fabric notebooks.
+
 Keep your code modular, your notebooks thin, and your local workflow intact.
 
 ## Installation
@@ -48,9 +51,11 @@ lh.write_table(products, "staging.products_snapshot")
 ```
 
 `Lakehouse` detects when it is running locally and when it is running inside Fabric.
+
 Locally, the first `read_table` for a Fabric table pulls from OneLake and caches it under
 `.laken/` as Delta; later reads use the cache. In a Fabric notebook, the same code reads
 from your attached lakehouse.
+
 Local writes stay under `.laken/` and do not sync to Fabric; in Fabric, writes persist to
 tables on the attached lakehouse.
 
@@ -69,19 +74,11 @@ myapp/
 └── .env
 ```
 
-The import path must match `[project].name` in `pyproject.toml` (here, `myapp`). Declare
-which packages go in the wheel — for example with hatchling:
+Add `laken` to your project dependencies. 
 
-```toml
-[tool.hatch.build.targets.wheel]
-packages = ["src/myapp"]
-```
-
-Add `laken` to your project dependencies. See the
+See the
 [Python packaging guide](https://packaging.python.org/en/latest/tutorials/packaging-projects/)
 if you are setting this up for the first time.
-
-Put your lakehouse logic in the package so notebooks stay thin:
 
 ```python
 # src/myapp/pipeline.py
@@ -196,7 +193,7 @@ laken reset <table>
 Environment, and publishes it so notebooks can import your package.
 
 `laken status`, `laken refresh`, and `laken reset` manage the local `.laken/` cache on your
-laptop (they do not run inside Fabric notebooks).
+laptop. They do not run inside Fabric notebooks.
 
 `laken status` lists cached tables with state (`mirror`, `sample`, or `local`), the Fabric
 source version when known, and notes such as staleness or sample size.
