@@ -66,7 +66,7 @@ class TestLakehouseDispatch:
         implementation.read_table.return_value = "result"
         with (
             patch("laken.lakehouse._is_fabric_context", return_value=True),
-            patch("laken.lakehouse.FabricLakehouse", return_value=implementation),
+            patch("laken.fabric.FabricLakehouse", return_value=implementation),
         ):
             lh = Lakehouse(lakehouse="Sales_LH")
         assert lh.read_table("products", as_="pandas") == "result"

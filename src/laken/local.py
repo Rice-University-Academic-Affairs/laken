@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import shutil
 from pathlib import Path
@@ -8,8 +10,8 @@ import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
 from deltalake import DeltaTable, write_deltalake
-from pyspark.sql import DataFrame as SparkDataFrame
 
+from laken._spark import SparkDataFrame
 from laken.frames import from_arrow, to_arrow
 from laken.onelake_fetcher import default_fabric_fetcher
 from laken.paths import (

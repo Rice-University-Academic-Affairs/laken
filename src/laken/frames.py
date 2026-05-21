@@ -2,9 +2,8 @@ import pandas as pd
 import polars as pl
 import pyarrow as pa
 from pyarrow import Table as ArrowTable
-from pyspark.sql import DataFrame as SparkDataFrame
-from pyspark.sql import SparkSession
 
+from laken._spark import get_or_create_spark_session, spark_dataframe_type, spark_import_error
 from laken.types import DfKind, InputFrame, OutputFrame
 
 
@@ -13,8 +12,13 @@ def kind_of(df: InputFrame) -> DfKind:
         return "pandas"
     if isinstance(df, pl.DataFrame):
         return "polars"
-    if isinstance(df, SparkDataFrame):
-        return "spark"
+    try:
+        spark_df_type = spark_dataframe_type()
+    except ImportError:
+        pass
+    else:
+        if isinstance(df, spark_df_type):
+            return "spark"
     raise TypeError(f"unsupported dataframe type: {type(df).__name__}")
 
 
@@ -30,18 +34,21 @@ def to_arrow(df: InputFrame) -> ArrowTable:
 def from_arrow(
     table: ArrowTable,
     as_: DfKind,
-    spark: SparkSession | None = None,
+    spark=None,
 ) -> OutputFrame:
     if as_ == "pandas":
         return table.to_pandas()
     if as_ == "polars":
         return pl.from_arrow(table)
-    if spark is None:
-        spark = SparkSession.builder.getOrCreate()
-    return spark.createDataFrame(table.to_pandas())
+    try:
+        if spark is None:
+            spark = get_or_create_spark_session()
+        return spark.createDataFrame(table.to_pandas())
+    except ImportError as err:
+        raise spark_import_error() from err
 
 
-def to_spark(df: InputFrame, spark: SparkSession) -> SparkDataFrame:
+def to_spark(df: InputFrame, spark) -> OutputFrame:
     kind = kind_of(df)
     if kind == "spark":
         return df
@@ -50,7 +57,7 @@ def to_spark(df: InputFrame, spark: SparkSession) -> SparkDataFrame:
     return spark.createDataFrame(df.to_pandas())
 
 
-def from_spark(spark_df: SparkDataFrame, as_: DfKind) -> OutputFrame:
+def from_spark(spark_df, as_: DfKind) -> OutputFrame:
     if as_ == "spark":
         return spark_df
     if as_ == "pandas":

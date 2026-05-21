@@ -1,11 +1,12 @@
+from __future__ import annotations
+
 import os
 from typing import Literal, overload
 
 import pandas as pd
 import polars as pl
-from pyspark.sql import DataFrame as SparkDataFrame
 
-from laken.fabric import FabricLakehouse
+from laken._spark import SparkDataFrame
 from laken.local import LocalLakehouse
 from laken.onelake_fetcher import default_fabric_fetcher
 from laken.protocol import LakehouseProtocol
@@ -42,6 +43,8 @@ class Lakehouse:
         sample_rows: int = DEFAULT_SAMPLE_ROWS,
     ):
         if _is_fabric_context():
+            from laken.fabric import FabricLakehouse
+
             self._implementation: LakehouseProtocol = FabricLakehouse(
                 lakehouse=lakehouse,
                 workspace_id=workspace_id,

@@ -1,10 +1,11 @@
+from __future__ import annotations
+
 from typing import Literal, overload
 
 import pandas as pd
 import polars as pl
-from pyspark.sql import DataFrame as SparkDataFrame
-from pyspark.sql import SparkSession
 
+from laken._spark import SparkDataFrame, get_or_create_spark_session
 from laken.frames import from_spark, to_spark
 from laken.paths import (
     format_fabric_table_name,
@@ -14,10 +15,6 @@ from laken.paths import (
     resolve_spark_table_name,
 )
 from laken.types import DfKind, InputFrame, WriteMode
-
-
-def _get_current_spark_session() -> SparkSession:
-    return SparkSession.builder.getOrCreate()
 
 
 def _fabric_constants():
@@ -41,8 +38,8 @@ class FabricLakehouse:
         self._workspace_id = workspace_id or ctx.get("currentWorkspaceId")
         self._workspace_name = workspace_name or ctx.get("currentWorkspaceName")
 
-    def _spark(self) -> SparkSession:
-        return _get_current_spark_session()
+    def _spark(self):
+        return get_or_create_spark_session()
 
     def _notebookutils(self):
         import notebookutils

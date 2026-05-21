@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 from typing import Literal, Protocol, overload, runtime_checkable
 
 import pandas as pd
 import polars as pl
-from pyspark.sql import DataFrame as SparkDataFrame
 
+from laken._spark import SparkDataFrame
 from laken.types import DfKind, InputFrame, OutputFrame, WriteMode
 
 
@@ -63,9 +65,7 @@ class LakehouseProtocol(Protocol):
         as_: DfKind = "spark",
     ) -> OutputFrame: ...
 
-    def write_table(
-        self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite"
-    ) -> None: ...
+    def write_table(self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite") -> None: ...
 
     def list_tables(self) -> list[str]: ...
 
@@ -84,9 +84,7 @@ class LakehouseProtocol(Protocol):
 
     def read_file(self, path: str, *, as_: DfKind = "spark") -> OutputFrame: ...
 
-    def write_file(
-        self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite"
-    ) -> None: ...
+    def write_file(self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite") -> None: ...
 
     def list_files(self, path: str = "") -> list[str]: ...
 
