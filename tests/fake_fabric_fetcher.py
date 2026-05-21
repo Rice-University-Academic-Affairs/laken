@@ -7,6 +7,8 @@ class FakeFabricFetcher:
     def __init__(self, *, inspect_errors: dict[str, Exception] | None = None):
         self.tables: dict[str, dict] = {}
         self.limits: list[int | None] = []
+        self.inspect_names: list[str] = []
+        self.fetch_names: list[str] = []
         self.inspect_errors = inspect_errors or {}
 
     def add(
@@ -32,11 +34,13 @@ class FakeFabricFetcher:
         }
 
     def inspect_table(self, name: str) -> FabricTableInfo:
+        self.inspect_names.append(name)
         if name in self.inspect_errors:
             raise self.inspect_errors[name]
         return self.tables[name]["info"]
 
     def fetch_table(self, name: str, *, limit: int | None = None) -> pa.Table:
+        self.fetch_names.append(name)
         self.limits.append(limit)
         table = self.tables[name]["table"]
         if limit is None:

@@ -11,6 +11,7 @@ from deltalake import DeltaTable, write_deltalake
 from pyspark.sql import DataFrame as SparkDataFrame
 
 from laken.frames import from_arrow, to_arrow
+from laken.onelake_fetcher import default_fabric_fetcher
 from laken.paths import (
     format_fabric_table_name,
     format_table_name,
@@ -46,7 +47,11 @@ class LocalLakehouse:
         self._lakehouse = lakehouse or os.getenv("FABRIC_LAKEHOUSE_NAME")
         self._workspace_id = workspace_id or os.getenv("FABRIC_WORKSPACE_ID")
         self._workspace_name = workspace_name or os.getenv("FABRIC_WORKSPACE_NAME")
-        self._fabric_fetcher = fabric_fetcher
+        self._fabric_fetcher = fabric_fetcher or default_fabric_fetcher(
+            lakehouse=lakehouse,
+            workspace_id=workspace_id,
+            workspace_name=workspace_name,
+        )
         self._max_full_cache_bytes = max_full_cache_bytes
         self._sample_rows = sample_rows
         self._metadata = TableMetadataStore(
