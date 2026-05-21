@@ -2,47 +2,10 @@ import json
 
 import pandas as pd
 import pyarrow as pa
+import pytest
+from fake_fabric_fetcher import FakeFabricFetcher
 
 from laken import LocalLakehouse
-from laken.workspace import FabricTableInfo
-
-
-class FakeFabricFetcher:
-    def __init__(self):
-        self.tables = {}
-        self.limits = []
-
-    def add(
-        self,
-        name: str,
-        table: pa.Table,
-        *,
-        version: int,
-        size_bytes: int,
-        workspace_id: str = "abc",
-        lakehouse_id: str = "def",
-    ) -> None:
-        self.tables[name] = {
-            "table": table,
-            "info": FabricTableInfo(
-                table=name,
-                delta_version=version,
-                workspace_id=workspace_id,
-                lakehouse_id=lakehouse_id,
-                row_count=table.num_rows,
-                size_bytes=size_bytes,
-            ),
-        }
-
-    def inspect_table(self, name: str) -> FabricTableInfo:
-        return self.tables[name]["info"]
-
-    def fetch_table(self, name: str, *, limit: int | None = None) -> pa.Table:
-        self.limits.append(limit)
-        table = self.tables[name]["table"]
-        if limit is None:
-            return table
-        return table.slice(0, limit)
 
 
 def _metadata(root):
@@ -160,3 +123,136 @@ def test_status_marks_stale_and_sample_tables(tmp_path):
     assert rows["raw_faculty"]["notes"] == "stale: Fabric is 2"
     assert rows["fact_events"]["state"] == "sample"
     assert rows["fact_events"]["notes"] == "2-row sample"
+
+
+def test_refresh_mirror_updates_cached_data_and_metadata(tmp_path, capsys):
+    root = tmp_path / ".laken" / "workspace"
+    fetcher = FakeFabricFetcher()
+    fetcher.add("raw_faculty", pa.table({"id": [1]}), version=1, size_bytes=100)
+    lakehouse = LocalLakehouse(root=root, fabric_fetcher=fetcher)
+    lakehouse.read_table("raw_faculty", as_="pandas")
+    capsys.readouterr()
+
+    fetcher.add("raw_faculty", pa.table({"id": [10, 11]}), version=3, size_bytes=100)
+    lakehouse.refresh_table("raw_faculty")
+
+    result = lakehouse.read_table("raw_faculty", as_="pandas")
+    assert result["id"].tolist() == [10, 11]
+    assert _metadata(root)["raw_faculty"]["state"] == "mirror"
+    assert _metadata(root)["raw_faculty"]["source"]["delta_version"] == 3
+    assert "laken: refreshed raw_faculty from Fabric version 3." in capsys.readouterr().out
+
+
+def test_refresh_sample_table_re_fetches(tmp_path):
+    root = tmp_path / ".laken" / "workspace"
+    fetcher = FakeFabricFetcher()
+    fetcher.add("fact_events", pa.table({"id": list(range(10))}), version=5, size_bytes=500)
+    lakehouse = LocalLakehouse(
+        root=root,
+        fabric_fetcher=fetcher,
+        max_full_cache_bytes=100,
+        sample_rows=2,
+    )
+    lakehouse.read_table("fact_events", as_="pandas")
+    fetcher.limits.clear()
+    fetcher.add("fact_events", pa.table({"id": [100, 101, 102]}), version=6, size_bytes=500)
+
+    lakehouse.refresh_table("fact_events")
+
+    assert lakehouse.read_table("fact_events", as_="pandas")["id"].tolist() == [100, 101]
+    assert fetcher.limits == [2]
+    assert _metadata(root)["fact_events"]["source"]["delta_version"] == 6
+
+
+def test_refresh_missing_table_raises(tmp_path):
+    root = tmp_path / ".laken" / "workspace"
+    lakehouse = LocalLakehouse(root=root, fabric_fetcher=FakeFabricFetcher())
+    with pytest.raises(FileNotFoundError, match="table not found"):
+        lakehouse.refresh_table("missing")
+
+
+def test_reset_without_fabric_source_raises(tmp_path):
+    root = tmp_path / ".laken" / "workspace"
+    lakehouse = LocalLakehouse(root=root)
+    lakehouse.write_table(pd.DataFrame({"id": [1]}), "local_only")
+    with pytest.raises(ValueError, match="has no Fabric source to reset"):
+        lakehouse.reset_table("local_only")
+
+
+def test_read_warns_when_inspect_fails(tmp_path, capsys):
+    root = tmp_path / ".laken" / "workspace"
+    fetcher = FakeFabricFetcher()
+    fetcher.add("raw_faculty", pa.table({"id": [1]}), version=1, size_bytes=100)
+    lakehouse = LocalLakehouse(root=root, fabric_fetcher=fetcher)
+    lakehouse.read_table("raw_faculty", as_="pandas")
+    capsys.readouterr()
+    fetcher.inspect_errors["raw_faculty"] = RuntimeError("network down")
+
+    lakehouse.read_table("raw_faculty", as_="pandas")
+
+    assert "laken: could not check Fabric freshness" in capsys.readouterr().out
+
+
+def test_status_freshness_unknown_when_inspect_fails(tmp_path):
+    root = tmp_path / ".laken" / "workspace"
+    fetcher = FakeFabricFetcher()
+    fetcher.add("raw_faculty", pa.table({"id": [1]}), version=1, size_bytes=100)
+    lakehouse = LocalLakehouse(root=root, fabric_fetcher=fetcher)
+    lakehouse.read_table("raw_faculty", as_="pandas")
+    fetcher.inspect_errors["raw_faculty"] = RuntimeError("network down")
+
+    rows = {row["table"]: row for row in lakehouse.status()}
+
+    assert rows["raw_faculty"]["notes"] == "freshness unknown"
+
+
+def test_cache_boundary_at_max_full_cache_bytes_uses_mirror(tmp_path):
+    root = tmp_path / ".laken" / "workspace"
+    fetcher = FakeFabricFetcher()
+    fetcher.add("boundary", pa.table({"id": [1, 2]}), version=1, size_bytes=100)
+    lakehouse = LocalLakehouse(
+        root=root,
+        fabric_fetcher=fetcher,
+        max_full_cache_bytes=100,
+    )
+    lakehouse.read_table("boundary", as_="pandas")
+    assert _metadata(root)["boundary"]["state"] == "mirror"
+    assert fetcher.limits == [None]
+
+    fetcher.limits.clear()
+    fetcher.add("boundary2", pa.table({"id": [1]}), version=1, size_bytes=101)
+    lakehouse.read_table("boundary2", as_="pandas")
+    assert _metadata(root)["boundary2"]["state"] == "sample"
+    assert fetcher.limits == [10000]
+
+
+def test_hydrate_four_part_name_without_workspace_context(tmp_path):
+    root = tmp_path / ".laken" / "workspace"
+    fetcher = FakeFabricFetcher()
+    fabric_name = "MyWorkspace.Sales_LH.dbo.products"
+    fetcher.add(fabric_name, pa.table({"id": [7]}), version=2, size_bytes=50)
+    lakehouse = LocalLakehouse(root=root, fabric_fetcher=fetcher)
+
+    result = lakehouse.read_table(fabric_name, as_="pandas")
+
+    assert result["id"].tolist() == [7]
+
+
+def test_drop_table_removes_mirror_metadata(tmp_path):
+    root = tmp_path / ".laken" / "workspace"
+    fetcher = FakeFabricFetcher()
+    fetcher.add("raw_faculty", pa.table({"id": [1]}), version=1, size_bytes=100)
+    lakehouse = LocalLakehouse(root=root, fabric_fetcher=fetcher)
+    lakehouse.read_table("raw_faculty", as_="pandas")
+    assert "raw_faculty" in _metadata(root)
+
+    lakehouse.drop_table("raw_faculty")
+
+    assert "raw_faculty" not in _metadata(root)
+    assert not lakehouse.table_exists("raw_faculty")
+
+
+def test_read_without_fetcher_raises_file_not_found(tmp_path):
+    lakehouse = LocalLakehouse(root=tmp_path / ".laken" / "workspace")
+    with pytest.raises(FileNotFoundError, match="table not found"):
+        lakehouse.read_table("missing", as_="pandas")
