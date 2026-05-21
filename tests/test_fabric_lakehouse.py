@@ -43,6 +43,18 @@ def mock_notebookutils():
 
 class TestFabricRuntimeContext:
     @patch("laken.fabric.FabricLakehouse._notebookutils")
+    def test_missing_workspace_name_does_not_raise(self, mock_nu_fn):
+        nu = MagicMock()
+        nu.runtime.context = {
+            "defaultLakehouseName": "Default_LH",
+            "currentWorkspaceId": "ws-id-123",
+        }
+        mock_nu_fn.return_value = nu
+        lh = FabricLakehouse()
+        assert lh._workspace_name is None
+        assert lh._workspace_id == "ws-id-123"
+
+    @patch("laken.fabric.FabricLakehouse._notebookutils")
     def test_defaults_from_context(self, mock_nu_fn, mock_notebookutils):
         mock_nu_fn.return_value = mock_notebookutils
         lh = FabricLakehouse()
@@ -175,9 +187,7 @@ class TestFabricDefaultLakehouse:
         mock_spark_fn.return_value = mock_spark
         lh = FabricLakehouse()
         lh.drop_table("products")
-        mock_spark.catalog.dropTable.assert_called_with(
-            "dbo.products", ignoreIfNotExists=True
-        )
+        mock_spark.catalog.dropTable.assert_called_with("dbo.products", ignoreIfNotExists=True)
 
     @patch("laken.fabric._get_current_spark_session")
     @patch("laken.fabric.from_spark", return_value="df")
@@ -229,9 +239,7 @@ class TestFabricDefaultLakehouse:
         mock_nu_fn.return_value = mock_notebookutils
         lh = FabricLakehouse()
         lh.delete_file("data/sample.parquet")
-        mock_notebookutils.fs.rm.assert_called_with(
-            "Files/data/sample.parquet", recurse=False
-        )
+        mock_notebookutils.fs.rm.assert_called_with("Files/data/sample.parquet", recurse=False)
 
 
 class TestFabricCrossLakehouse:
@@ -246,6 +254,19 @@ class TestFabricCrossLakehouse:
         assert lh._resolve_table_name("marketing.products") == (
             "MyWorkspace.Sales_LH.marketing.products"
         )
+
+    @patch("laken.fabric.FabricLakehouse._notebookutils")
+    def test_resolve_table_passes_through_existing_four_part_name(
+        self, mock_nu_fn, mock_notebookutils
+    ):
+        mock_nu_fn.return_value = mock_notebookutils
+        lh = FabricLakehouse(
+            lakehouse="Sales_LH",
+            workspace_id="ws-id-123",
+            workspace_name="MyWorkspace",
+        )
+        name = "MyWorkspace.Sales_LH.marketing.products"
+        assert lh._resolve_table_name(name) == name
 
     @patch("laken.fabric.FabricLakehouse._notebookutils")
     def test_file_path_abfss(self, mock_nu_fn, mock_notebookutils):

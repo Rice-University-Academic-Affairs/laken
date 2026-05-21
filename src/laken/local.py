@@ -11,7 +11,12 @@ from deltalake import DeltaTable, write_deltalake
 from pyspark.sql import DataFrame as SparkDataFrame
 
 from laken.frames import from_arrow, to_arrow
-from laken.paths import format_table_name, parse_table_name
+from laken.paths import (
+    format_fabric_table_name,
+    format_table_name,
+    is_four_part_table_name,
+    parse_table_name,
+)
 from laken.types import DfKind, InputFrame, WriteMode
 from laken.workspace import (
     DEFAULT_SAMPLE_ROWS,
@@ -29,12 +34,18 @@ class LocalLakehouse:
         self,
         root: str | os.PathLike = ".laken/workspace",
         *,
+        lakehouse: str | None = None,
+        workspace_id: str | None = None,
+        workspace_name: str | None = None,
         metadata_path: str | os.PathLike | None = None,
         fabric_fetcher: FabricTableFetcher | None = None,
         max_full_cache_bytes: int = MAX_FULL_CACHE_BYTES,
         sample_rows: int = DEFAULT_SAMPLE_ROWS,
     ):
         self._root = Path(root).resolve()
+        self._lakehouse = lakehouse or os.getenv("FABRIC_LAKEHOUSE_NAME")
+        self._workspace_id = workspace_id or os.getenv("FABRIC_WORKSPACE_ID")
+        self._workspace_name = workspace_name or os.getenv("FABRIC_WORKSPACE_NAME")
         self._fabric_fetcher = fabric_fetcher
         self._max_full_cache_bytes = max_full_cache_bytes
         self._sample_rows = sample_rows
@@ -128,8 +139,20 @@ class LocalLakehouse:
         print(f"laken: cached {key} locally as a Delta table.")
         return entry
 
+    def _can_resolve_fabric_name(self) -> bool:
+        return bool(self._workspace_name and self._lakehouse)
+
+    def _resolve_fetch_name(self, name: str) -> str:
+        stripped = name.strip()
+        if is_four_part_table_name(stripped):
+            return stripped
+        if self._can_resolve_fabric_name():
+            schema, table = parse_table_name(stripped)
+            return format_fabric_table_name(self._workspace_name, self._lakehouse, schema, table)
+        return stripped
+
     def _hydrate_table(self, name: str) -> None:
-        self._fetch_and_cache(name, name)
+        self._fetch_and_cache(name, self._resolve_fetch_name(name))
 
     def _warn_about_cached_table(self, name: str) -> None:
         key = self._table_key(name)
@@ -151,10 +174,7 @@ class LocalLakehouse:
         if cached_version is not None and current.delta_version != cached_version:
             print(f"laken: {key} is cached from Fabric version {cached_version}.")
             print(f"laken: Fabric is now at version {current.delta_version}.")
-            print(
-                f"laken: using the local cached version. "
-                f"Run `laken refresh {key}` to update."
-            )
+            print(f"laken: using the local cached version. Run `laken refresh {key}` to update.")
 
     def refresh_table(self, name: str) -> None:
         key = self._table_key(name)
@@ -280,9 +300,7 @@ class LocalLakehouse:
     ) -> SparkDataFrame | pd.DataFrame | pl.DataFrame:
         return self.read_file(table_name, as_=as_)
 
-    def write_table(
-        self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite"
-    ) -> None:
+    def write_table(self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite") -> None:
         table_dir = self._table_dir(name)
         arrow_table = to_arrow(df)
         key = self._table_key(name)
@@ -356,9 +374,7 @@ class LocalLakehouse:
             raise FileNotFoundError(f"file not found: {path}")
         return from_arrow(pq.read_table(file_path), as_)
 
-    def write_file(
-        self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite"
-    ) -> None:
+    def write_file(self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite") -> None:
         file_path = self._file_path(path)
         arrow_table = to_arrow(df)
         if mode == "overwrite":

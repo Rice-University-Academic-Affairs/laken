@@ -31,6 +31,19 @@ class TestLakehouseDispatch:
         assert result.equals(df)
         assert isinstance(lh, LakehouseProtocol)
 
+    def test_local_lakehouse_receives_workspace_and_lakehouse(self, tmp_path):
+        lh = Lakehouse(
+            root=tmp_path / "lakehouse",
+            lakehouse="Sales_LH",
+            workspace_id="ws-123",
+            workspace_name="MyWorkspace",
+        )
+        impl = lh._implementation
+        assert isinstance(impl, LocalLakehouse)
+        assert impl._lakehouse == "Sales_LH"
+        assert impl._workspace_id == "ws-123"
+        assert impl._workspace_name == "MyWorkspace"
+
     def test_fabric_context_uses_fabric_lakehouse(self, monkeypatch):
         monkeypatch.setitem(sys.modules, "notebookutils", _fake_notebookutils())
         lh = Lakehouse(lakehouse="Sales_LH")

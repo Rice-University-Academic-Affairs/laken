@@ -6,7 +6,12 @@ from pyspark.sql import DataFrame as SparkDataFrame
 from pyspark.sql import SparkSession
 
 from laken.frames import from_spark, to_spark
-from laken.paths import format_table_name, parse_table_name
+from laken.paths import (
+    format_fabric_table_name,
+    format_table_name,
+    is_four_part_table_name,
+    parse_table_name,
+)
 from laken.types import DfKind, InputFrame, WriteMode
 
 
@@ -33,7 +38,7 @@ class FabricLakehouse:
         self._explicit_lakehouse = lakehouse is not None
         self._lakehouse = lakehouse or ctx.get("defaultLakehouseName")
         self._workspace_id = workspace_id or ctx.get("currentWorkspaceId")
-        self._workspace_name = workspace_name or ctx["currentWorkspaceName"]
+        self._workspace_name = workspace_name or ctx.get("currentWorkspaceName")
 
     def _spark(self) -> SparkSession:
         return _get_current_spark_session()
@@ -52,9 +57,7 @@ class FabricLakehouse:
         if not self._workspace_name:
             missing.append("workspace_name")
         if missing:
-            raise ValueError(
-                f"cross-lakehouse operations require: {', '.join(missing)}"
-            )
+            raise ValueError(f"cross-lakehouse operations require: {', '.join(missing)}")
 
     def _abfss_root(self) -> str:
         self._require_cross_lakehouse_context()
@@ -64,11 +67,15 @@ class FabricLakehouse:
         )
 
     def _resolve_table_name(self, name: str) -> str:
-        schema, table = parse_table_name(name)
+        stripped = name.strip()
         if not self._explicit_lakehouse:
+            schema, table = parse_table_name(stripped)
             return format_table_name(schema, table)
         self._require_cross_lakehouse_context()
-        return f"{self._workspace_name}.{self._lakehouse}.{schema}.{table}"
+        if is_four_part_table_name(stripped):
+            return stripped
+        schema, table = parse_table_name(stripped)
+        return format_fabric_table_name(self._workspace_name, self._lakehouse, schema, table)
 
     def _resolve_warehouse_workspace_id(self, workspace_id: str | None) -> str:
         resolved = workspace_id if workspace_id is not None else self._workspace_id
@@ -152,15 +159,11 @@ class FabricLakehouse:
                 constants.WorkspaceId,
                 self._resolve_warehouse_workspace_id(workspace_id),
             )
-            .synapsesql(
-                self._resolve_warehouse_table_name(table_name, warehouse_name, schema)
-            )
+            .synapsesql(self._resolve_warehouse_table_name(table_name, warehouse_name, schema))
         )
         return from_spark(spark_df, as_)
 
-    def write_table(
-        self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite"
-    ) -> None:
+    def write_table(self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite") -> None:
         spark = self._spark()
         to_spark(df, spark).write.mode(mode).format("delta").saveAsTable(
             self._resolve_table_name(name)
@@ -206,13 +209,9 @@ class FabricLakehouse:
         spark_df = spark.read.parquet(self._file_path(path))
         return from_spark(spark_df, as_)
 
-    def write_file(
-        self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite"
-    ) -> None:
+    def write_file(self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite") -> None:
         spark = self._spark()
-        to_spark(df, spark).write.mode(mode).format("parquet").save(
-            self._file_path(path)
-        )
+        to_spark(df, spark).write.mode(mode).format("parquet").save(self._file_path(path))
 
     def list_files(self, path: str = "") -> list[str]:
         nu = self._notebookutils()

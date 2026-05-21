@@ -7,6 +7,7 @@ from pyspark.sql import DataFrame as SparkDataFrame
 
 from laken.fabric import FabricLakehouse
 from laken.local import LocalLakehouse
+from laken.onelake_fetcher import default_fabric_fetcher
 from laken.protocol import LakehouseProtocol
 from laken.types import DfKind, InputFrame, OutputFrame, WriteMode
 from laken.workspace import DEFAULT_SAMPLE_ROWS, MAX_FULL_CACHE_BYTES, FabricTableFetcher
@@ -47,10 +48,18 @@ class Lakehouse:
                 workspace_name=workspace_name,
             )
             return
+        resolved_fetcher = fabric_fetcher or default_fabric_fetcher(
+            lakehouse=lakehouse,
+            workspace_id=workspace_id,
+            workspace_name=workspace_name,
+        )
         self._implementation = LocalLakehouse(
             root=root,
+            lakehouse=lakehouse,
+            workspace_id=workspace_id,
+            workspace_name=workspace_name,
             metadata_path=metadata_path,
-            fabric_fetcher=fabric_fetcher,
+            fabric_fetcher=resolved_fetcher,
             max_full_cache_bytes=max_full_cache_bytes,
             sample_rows=sample_rows,
         )
@@ -117,9 +126,7 @@ class Lakehouse:
             as_=as_,
         )
 
-    def write_table(
-        self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite"
-    ) -> None:
+    def write_table(self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite") -> None:
         self._implementation.write_table(df, name, mode=mode)
 
     def list_tables(self) -> list[str]:
@@ -161,9 +168,7 @@ class Lakehouse:
     def read_file(self, path: str, *, as_: DfKind = "spark") -> OutputFrame:
         return self._implementation.read_file(path, as_=as_)
 
-    def write_file(
-        self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite"
-    ) -> None:
+    def write_file(self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite") -> None:
         self._implementation.write_file(df, path, mode=mode)
 
     def list_files(self, path: str = "") -> list[str]:

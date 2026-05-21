@@ -10,6 +10,16 @@ class TestParseTableName:
     def test_qualified_name(self):
         assert parse_table_name("marketing.products") == ("marketing", "products")
 
+    def test_four_part_name(self):
+        assert parse_table_name("MyWorkspace.Sales_LH.marketing.products") == (
+            "marketing",
+            "products",
+        )
+
+    def test_three_part_name_raises(self):
+        with pytest.raises(ValueError):
+            parse_table_name("workspace.lakehouse.table")
+
     def test_empty_raises(self):
         with pytest.raises(ValueError):
             parse_table_name("")
