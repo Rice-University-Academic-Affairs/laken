@@ -2,7 +2,6 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
-from pyspark.sql import DataFrame as SparkDataFrame
 
 from laken.frames import from_arrow, kind_of, to_arrow
 
@@ -33,11 +32,11 @@ class TestArrowRoundtrip:
 
 
 class TestFromArrowSpark:
-    @patch("laken.frames.SparkSession")
-    def test_create_dataframe_called(self, mock_spark_session):
+    @patch("laken.frames.get_or_create_spark_session")
+    def test_create_dataframe_called(self, mock_get_spark):
         mock_spark = MagicMock()
-        mock_spark_session.builder.getOrCreate.return_value = mock_spark
-        mock_spark.createDataFrame.return_value = MagicMock(spec=SparkDataFrame)
+        mock_get_spark.return_value = mock_spark
+        mock_spark.createDataFrame.return_value = MagicMock()
         table = to_arrow(pd.DataFrame({"id": [1], "value": ["a"]}))
         result = from_arrow(table, "spark")
         mock_spark.createDataFrame.assert_called_once()

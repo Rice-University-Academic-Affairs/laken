@@ -78,7 +78,7 @@ class TestFabricDefaultLakehouse:
         lh = FabricLakehouse()
         assert lh._resolve_table_name("products") == "products"
 
-    @patch("laken.fabric._get_current_spark_session")
+    @patch("laken.fabric.get_or_create_spark_session")
     @patch("laken.fabric.FabricLakehouse._notebookutils")
     def test_read_table_uses_schema_table(
         self, mock_nu_fn, mock_spark_fn, mock_spark, mock_notebookutils
@@ -92,7 +92,7 @@ class TestFabricDefaultLakehouse:
         from_spark.assert_called_once()
         assert result == "result"
 
-    @patch("laken.fabric._get_current_spark_session")
+    @patch("laken.fabric.get_or_create_spark_session")
     @patch("laken.fabric._fabric_constants")
     @patch("laken.fabric.FabricLakehouse._notebookutils")
     def test_load_table_from_warehouse(
@@ -120,7 +120,7 @@ class TestFabricDefaultLakehouse:
         from_spark.assert_called_once_with(mock_spark.read.synapsesql.return_value, "pandas")
         assert result == "result"
 
-    @patch("laken.fabric._get_current_spark_session")
+    @patch("laken.fabric.get_or_create_spark_session")
     @patch("laken.fabric._fabric_constants")
     @patch("laken.fabric.FabricLakehouse._notebookutils")
     def test_load_table_from_warehouse_custom_workspace_without_schema(
@@ -147,7 +147,7 @@ class TestFabricDefaultLakehouse:
         mock_spark.read.option.assert_called_once_with("workspace-id-option", "custom-ws")
         mock_spark.read.synapsesql.assert_called_once_with("SalesWarehouse.orders")
 
-    @patch("laken.fabric._get_current_spark_session")
+    @patch("laken.fabric.get_or_create_spark_session")
     @patch("laken.fabric.to_spark")
     def test_write_table_delta(self, mock_to_spark, mock_spark_fn, mock_spark):
         mock_spark_fn.return_value = mock_spark
@@ -177,7 +177,7 @@ class TestFabricDefaultLakehouse:
             workspaceId="ws-id-123",
         )
 
-    @patch("laken.fabric._get_current_spark_session")
+    @patch("laken.fabric.get_or_create_spark_session")
     @patch("laken.fabric.FabricLakehouse._notebookutils")
     def test_table_exists(self, mock_nu_fn, mock_spark_fn, mock_spark, mock_notebookutils):
         mock_nu_fn.return_value = mock_notebookutils
@@ -186,7 +186,7 @@ class TestFabricDefaultLakehouse:
         assert lh.table_exists("products")
         mock_spark.catalog.tableExists.assert_called_with("products")
 
-    @patch("laken.fabric._get_current_spark_session")
+    @patch("laken.fabric.get_or_create_spark_session")
     @patch("laken.fabric.FabricLakehouse._notebookutils")
     def test_drop_table(self, mock_nu_fn, mock_spark_fn, mock_spark, mock_notebookutils):
         mock_nu_fn.return_value = mock_notebookutils
@@ -195,7 +195,7 @@ class TestFabricDefaultLakehouse:
         lh.drop_table("products")
         mock_spark.catalog.dropTable.assert_called_with("products", ignoreIfNotExists=True)
 
-    @patch("laken.fabric._get_current_spark_session")
+    @patch("laken.fabric.get_or_create_spark_session")
     @patch("laken.fabric.from_spark", return_value="df")
     @patch("laken.fabric.FabricLakehouse._notebookutils")
     def test_read_file_relative_path(
@@ -207,7 +207,7 @@ class TestFabricDefaultLakehouse:
         lh.read_file("data/sample.parquet")
         mock_spark.read.parquet.assert_called_with("Files/data/sample.parquet")
 
-    @patch("laken.fabric._get_current_spark_session")
+    @patch("laken.fabric.get_or_create_spark_session")
     @patch("laken.fabric.to_spark")
     @patch("laken.fabric.FabricLakehouse._notebookutils")
     def test_write_file_parquet(

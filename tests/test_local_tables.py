@@ -61,6 +61,11 @@ class TestLocalTables:
         lakehouse.drop_table("products")
         assert not lakehouse.table_exists("products")
 
+    def test_read_default_is_pandas(self, lakehouse, sample_pandas):
+        lakehouse.write_table(sample_pandas, "products")
+        result = lakehouse.read_table("products")
+        assert isinstance(result, pd.DataFrame)
+
     def test_read_missing_raises(self, lakehouse):
         with pytest.raises(FileNotFoundError):
             lakehouse.read_table("products")

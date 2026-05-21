@@ -5,7 +5,7 @@ from laken.protocol import LakehouseProtocol
 from laken.types import DfKind, InputFrame, OutputFrame, WriteMode
 
 
-def read_table(name: str, *, as_: DfKind = "spark") -> OutputFrame:
+def read_table(name: str, *, as_: DfKind | None = None) -> OutputFrame:
     return Lakehouse().read_table(name, as_=as_)
 
 

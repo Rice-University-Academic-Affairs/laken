@@ -170,8 +170,8 @@ and Fabric resolves it (typically the default `dbo` schema on a schema-enabled l
 lh.write_table(df, "products")
 lh.write_table(df, "marketing.products", mode="append")
 
-df = lh.read_table("products")                    # Spark
-df = lh.read_table("products", as_="pandas")
+df = lh.read_table("products")                    # pandas locally, Spark in Fabric
+df = lh.read_table("products", as_="spark")       # Spark (Fabric runtime)
 df = lh.read_table("marketing.products", as_="polars")
 
 lh.list_tables()
