@@ -71,7 +71,7 @@ Step-by-step: `.cursor/skills/` — `/sync-dev-env`, `/run-tests`, `/run-lint`, 
 |----------|---------|
 | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` | OAuth |
 | `FABRIC_WORKSPACE_NAME`, `FABRIC_LAKEHOUSE_NAME` | OneLake paths |
-| `FABRIC_WORKSPACE_ID`, `FABRIC_LAKEHOUSE_ID` | ID-based URIs and fixture seeding |
+| `FABRIC_WORKSPACE_ID`, `FABRIC_LAKEHOUSE_ID` | ID-based OneLake URIs |
 
 If credentials are missing, those tests skip. If they are set (Cursor Cloud / CI with secrets), agents must run them and report pass/skip/fail.
 
