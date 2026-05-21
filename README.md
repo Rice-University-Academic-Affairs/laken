@@ -15,6 +15,9 @@ Keep your code modular, your notebooks thin, and your local workflow intact.
 
 ## Installation
 
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) if you do not have it
+yet, then:
+
 ```bash
 uv add laken
 ```
@@ -25,8 +28,8 @@ or:
 pip install laken
 ```
 
-`laken deploy` expects `uv` on `PATH` because it builds your application package before
-publishing it to Fabric.
+`laken deploy` expects [uv](https://docs.astral.sh/uv/getting-started/installation/) on
+`PATH` because it builds your application package before publishing it to Fabric.
 
 ## Develop against your lakehouse
 
