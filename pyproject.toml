@@ -42,3 +42,6 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["tests"]
+markers = [
+    "integration: live Fabric tests (requires AZURE_* and FABRIC_* env vars)",
+]

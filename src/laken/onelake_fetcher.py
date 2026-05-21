@@ -1,8 +1,11 @@
 import os
 
 import pyarrow as pa
+import pyarrow.csv as pacsv
+import pyarrow.parquet as pq
 import requests
 from deltalake import DeltaTable
+from deltalake.fs import DeltaStorageHandler
 
 from laken.paths import format_fabric_table_name, is_four_part_table_name, parse_table_name
 from laken.workspace import FabricTableInfo
@@ -57,12 +60,18 @@ def _resolve_fabric_table_name(
     return workspace_name, lakehouse, schema, table
 
 
+def _lakehouse_root_uri(workspace_name: str, lakehouse: str) -> str:
+    return f"abfss://{workspace_name}@onelake.dfs.fabric.microsoft.com/{lakehouse}.Lakehouse/"
+
+
 def _table_uri(workspace_name: str, lakehouse: str, schema: str, table: str) -> str:
     table_path = table if schema == "dbo" else f"{schema}/{table}"
-    return (
-        f"abfss://{workspace_name}@onelake.dfs.fabric.microsoft.com/"
-        f"{lakehouse}.Lakehouse/Tables/{table_path}"
-    )
+    return f"{_lakehouse_root_uri(workspace_name, lakehouse)}Tables/{table_path}"
+
+
+def _file_storage_path(path: str) -> str:
+    normalized = path.replace("\\", "/").lstrip("/")
+    return f"Files/{normalized}"
 
 
 class OneLakeFabricFetcher:
@@ -114,6 +123,19 @@ class OneLakeFabricFetcher:
         if limit is not None:
             return table.slice(0, limit)
         return table
+
+    def fetch_file(self, path: str) -> pa.Table:
+        normalized = path.replace("\\", "/").lstrip("/")
+        root_uri = _lakehouse_root_uri(self._workspace_name, self._lakehouse)
+        storage_path = _file_storage_path(normalized)
+        handler = DeltaStorageHandler(root_uri, _storage_options())
+        with handler.open_input_file(storage_path) as handle:
+            data = handle.read()
+        if normalized.endswith(".csv"):
+            return pacsv.read_csv(pa.BufferReader(data))
+        if normalized.endswith(".parquet"):
+            return pq.read_table(pa.BufferReader(data))
+        raise ValueError(f"unsupported file type: {path}")
 
 
 def default_fabric_fetcher(

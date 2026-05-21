@@ -108,3 +108,24 @@ def test_onelake_fetcher_dbo_table_uri(mock_post, mock_delta, monkeypatch):
 
     uri = mock_delta.call_args.args[0]
     assert uri.endswith("LH.Lakehouse/Tables/products")
+
+
+@patch("laken.onelake_fetcher.DeltaStorageHandler")
+@patch("laken.onelake_fetcher.requests.post")
+def test_onelake_fetcher_fetch_csv(mock_post, mock_handler, monkeypatch):
+    monkeypatch.setenv("AZURE_TENANT_ID", "tenant-id")
+    monkeypatch.setenv("AZURE_CLIENT_ID", "client-id")
+    monkeypatch.setenv("AZURE_CLIENT_SECRET", "client-secret")
+    mock_post.return_value.raise_for_status.return_value = None
+    mock_post.return_value.json.return_value = {"access_token": "tok"}
+    mock_instance = mock_handler.return_value
+    mock_handle = mock_instance.open_input_file.return_value.__enter__.return_value
+    mock_handle.read.return_value = b"id,name,value\n1,Alice,10.5\n"
+
+    fetcher = OneLakeFabricFetcher(workspace_name="WS", lakehouse="LH")
+    table = fetcher.fetch_file("examples/integration_test/example.csv")
+
+    mock_instance.open_input_file.assert_called_once_with(
+        "Files/examples/integration_test/example.csv"
+    )
+    assert table.column("id").to_pylist() == [1]
