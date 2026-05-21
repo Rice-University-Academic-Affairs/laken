@@ -141,11 +141,12 @@ For tests or scripts that must pin a backend:
 from laken import FabricLakehouse, LocalLakehouse
 ```
 
-**Tables** — `write_table` requires `schema.table`. Reads accept bare table names (default
-schema `dbo`) or a qualified name. `mode` is `"overwrite"` or `"append"`.
+**Tables** — use `schema.table` to target a schema; a bare name is passed through to Spark
+and Fabric resolves it (typically the default `dbo` schema on a schema-enabled lakehouse).
+`mode` is `"overwrite"` or `"append"`.
 
 ```python
-lh.write_table(df, "marketing.products")
+lh.write_table(df, "products")
 lh.write_table(df, "marketing.products", mode="append")
 
 df = lh.read_table("products")                    # Spark

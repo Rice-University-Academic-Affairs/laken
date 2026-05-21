@@ -72,6 +72,12 @@ class TestFabricRuntimeContext:
 
 
 class TestFabricDefaultLakehouse:
+    @patch("laken.fabric.FabricLakehouse._notebookutils")
+    def test_resolve_bare_table_name_passes_through(self, mock_nu_fn, mock_notebookutils):
+        mock_nu_fn.return_value = mock_notebookutils
+        lh = FabricLakehouse()
+        assert lh._resolve_table_name("products") == "products"
+
     @patch("laken.fabric._get_current_spark_session")
     @patch("laken.fabric.FabricLakehouse._notebookutils")
     def test_read_table_uses_schema_table(
@@ -156,10 +162,10 @@ class TestFabricDefaultLakehouse:
             nu.runtime.context = _mock_runtime_context()
             mock_nu_fn.return_value = nu
             lh = FabricLakehouse()
-        lh.write_table(MagicMock(), "dbo.products", mode="append")
+        lh.write_table(MagicMock(), "products", mode="append")
         writer.mode.assert_called_with("append")
         writer.format.assert_called_with("delta")
-        writer.saveAsTable.assert_called_with("dbo.products")
+        writer.saveAsTable.assert_called_with("products")
 
     @patch("laken.fabric.FabricLakehouse._notebookutils")
     def test_list_tables(self, mock_nu_fn, mock_notebookutils):
@@ -178,7 +184,7 @@ class TestFabricDefaultLakehouse:
         mock_spark_fn.return_value = mock_spark
         lh = FabricLakehouse()
         assert lh.table_exists("products")
-        mock_spark.catalog.tableExists.assert_called_with("dbo.products")
+        mock_spark.catalog.tableExists.assert_called_with("products")
 
     @patch("laken.fabric._get_current_spark_session")
     @patch("laken.fabric.FabricLakehouse._notebookutils")
@@ -187,7 +193,7 @@ class TestFabricDefaultLakehouse:
         mock_spark_fn.return_value = mock_spark
         lh = FabricLakehouse()
         lh.drop_table("products")
-        mock_spark.catalog.dropTable.assert_called_with("dbo.products", ignoreIfNotExists=True)
+        mock_spark.catalog.dropTable.assert_called_with("products", ignoreIfNotExists=True)
 
     @patch("laken.fabric._get_current_spark_session")
     @patch("laken.fabric.from_spark", return_value="df")

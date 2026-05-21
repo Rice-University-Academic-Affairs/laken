@@ -83,7 +83,7 @@ def test_write_to_mirror_converts_to_local_and_reset_restores_fabric(tmp_path, c
     lakehouse.read_table("raw_faculty", as_="pandas")
     capsys.readouterr()
 
-    lakehouse.write_table(pd.DataFrame({"id": [99]}), "dbo.raw_faculty")
+    lakehouse.write_table(pd.DataFrame({"id": [99]}), "raw_faculty")
 
     entry = _metadata(root)["raw_faculty"]
     assert entry["state"] == "local"
@@ -174,7 +174,7 @@ def test_refresh_missing_table_raises(tmp_path):
 def test_reset_without_fabric_source_raises(tmp_path):
     root = tmp_path / ".laken" / "workspace"
     lakehouse = LocalLakehouse(root=root)
-    lakehouse.write_table(pd.DataFrame({"id": [1]}), "dbo.local_only")
+    lakehouse.write_table(pd.DataFrame({"id": [1]}), "local_only")
     with pytest.raises(ValueError, match="has no Fabric source to reset"):
         lakehouse.reset_table("local_only")
 
