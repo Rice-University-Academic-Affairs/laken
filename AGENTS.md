@@ -51,7 +51,7 @@ Use `uv run` — not bare `pytest`/`ruff` or `pip install -e .` unless the user 
 | Lint | `uv run ruff check` |
 | Format | `uv run ruff format` |
 | Build wheel | `uv build` or `make build` |
-| Publish to PyPI | `make publish` (requires `PYPI_TOKEN`) |
+| Publish to PyPI | `make publish` (`PYPI_TOKEN` in `.env` or env) |
 
 Step-by-step: `.cursor/skills/` — `/sync-dev-env`, `/run-tests`, `/run-lint`, `/build-package`.
 
