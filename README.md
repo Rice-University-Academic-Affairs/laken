@@ -1,8 +1,18 @@
+<div align="center">
+
 # laken
 
-The missing local development workflow for Microsoft Fabric.
+**The missing local development workflow for Microsoft Fabric.**
 
-laken lets you develop Python code for Fabric locally, using the tooling you already trust.
+[![Python](https://img.shields.io/badge/python-3.11+-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![PyPI](https://img.shields.io/pypi/v/laken.svg)](https://pypi.org/project/laken/)
+[![Microsoft Fabric](https://img.shields.io/badge/Microsoft-Fabric-0078D4?logo=microsoft&logoColor=white)](https://www.microsoft.com/microsoft-fabric)
+
+</div>
+
+<br>
+
+**laken** lets you develop Python code for Fabric locally, using the tooling you already trust.
 
 Write local code against real lakehouse data. The same code runs in Fabric without modification.
 
@@ -10,6 +20,8 @@ When you're ready, `laken deploy` packages your project, publishes it to Fabric,
 available to your Fabric notebooks.
 
 Keep your code modular, your notebooks thin, and your local workflow intact.
+
+---
 
 ## Installation
 
@@ -26,6 +38,8 @@ pip install laken
 
 Deploy uses [uv](https://docs.astral.sh/uv/getting-started/installation/) to build your
 wheel before publishing to a Fabric environment.
+
+---
 
 ## Develop against your Fabric lakehouse
 
@@ -58,6 +72,8 @@ from your attached lakehouse.
 
 Local writes stay under `.laken/` and do not sync to Fabric; in Fabric, writes persist to
 tables on the attached lakehouse.
+
+---
 
 ## Deploy to Fabric
 
@@ -121,6 +137,8 @@ from myapp.pipeline import run_pipeline
 lh = Lakehouse()
 run_pipeline(lh)
 ```
+
+---
 
 ## Reference
 
@@ -207,7 +225,7 @@ have been cached from Fabric first.
 ### Environment variables
 
 | Variable | Purpose |
-| --- | --- |
+| :--- | :--- |
 | `AZURE_TENANT_ID` | Auth (fetch + deploy) |
 | `AZURE_CLIENT_ID` | Auth (fetch + deploy) |
 | `AZURE_CLIENT_SECRET` | Auth (fetch + deploy) |
@@ -241,7 +259,7 @@ Fabric environment with a compatible Python/Spark runtime.
 ### Local vs Fabric
 
 | Class | Where | Storage | Reads | Writes |
-| --- | --- | --- | --- | --- |
+| :--- | :--- | :--- | :--- | :--- |
 | `Lakehouse` | Auto-detects notebook context | Fabric if available, else `.laken/` Delta | Local: Fabric → cache; Fabric: attached lakehouse | Local: `.laken/` only; Fabric: attached lakehouse |
 | `LocalLakehouse` | Laptop / CI | `.laken/workspace/` | Cached Delta and local tables | Local only; not pushed to Fabric |
 | `FabricLakehouse` | Fabric notebook | Attached lakehouse | Spark/Delta on attached lakehouse | Delta tables on attached lakehouse |
@@ -249,6 +267,8 @@ Fabric environment with a compatible Python/Spark runtime.
 First local read of a Fabric table fetches and caches Delta under `.laken/`. If Fabric
 changes, `laken` warns and keeps the cache until you run `laken refresh <table>`. Large
 tables may cache as a fixed-size sample.
+
+---
 
 ## Development
 
