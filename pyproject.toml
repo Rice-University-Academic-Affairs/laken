@@ -1,6 +1,6 @@
 [project]
 name = "laken"
-version = "0.1.0"
+version = "0.1.1"
 description = "Local and Fabric lakehouse abstraction for modular, testable data code"
 readme = "README.md"
 authors = [
@@ -26,10 +26,14 @@ laken = "laken.cli:app"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.sdist]
+only-include = ["src/laken"]
+
 [dependency-groups]
 dev = [
     "pytest>=9.0.3",
     "ruff>=0.15.13",
+    "twine>=6.1.0",
 ]
 
 [tool.ruff]
