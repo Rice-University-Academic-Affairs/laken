@@ -156,7 +156,7 @@ class TestFabricDefaultLakehouse:
             nu.runtime.context = _mock_runtime_context()
             mock_nu_fn.return_value = nu
             lh = FabricLakehouse()
-        lh.write_table(MagicMock(), "products", mode="append")
+        lh.write_table(MagicMock(), "dbo.products", mode="append")
         writer.mode.assert_called_with("append")
         writer.format.assert_called_with("delta")
         writer.saveAsTable.assert_called_with("dbo.products")

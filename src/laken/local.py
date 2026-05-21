@@ -17,6 +17,7 @@ from laken.paths import (
     format_table_name,
     is_four_part_table_name,
     parse_table_name,
+    require_qualified_table_name,
 )
 from laken.types import DfKind, InputFrame, WriteMode
 from laken.workspace import (
@@ -311,6 +312,7 @@ class LocalLakehouse:
         return self.read_file(table_name, as_=as_)
 
     def write_table(self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite") -> None:
+        require_qualified_table_name(name)
         table_dir = self._table_dir(name)
         arrow_table = to_arrow(df)
         key = self._table_key(name)

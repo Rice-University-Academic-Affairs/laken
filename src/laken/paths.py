@@ -19,6 +19,17 @@ def parse_table_name(name: str) -> tuple[str, str]:
     raise ValueError(f"unsupported table name format: {name}")
 
 
+def require_qualified_table_name(name: str) -> tuple[str, str]:
+    parts = table_name_parts(name)
+    if len(parts) == 1:
+        raise ValueError("write_table requires schema.table; bare table names are not supported")
+    if len(parts) == 2:
+        return parts[0], parts[1]
+    if len(parts) == 4:
+        return parts[2], parts[3]
+    raise ValueError(f"unsupported table name format: {name}")
+
+
 def format_table_name(schema: str, table: str) -> str:
     return f"{schema}.{table}"
 

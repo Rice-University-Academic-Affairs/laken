@@ -11,6 +11,7 @@ from laken.paths import (
     format_table_name,
     is_four_part_table_name,
     parse_table_name,
+    require_qualified_table_name,
 )
 from laken.types import DfKind, InputFrame, WriteMode
 
@@ -164,6 +165,7 @@ class FabricLakehouse:
         return from_spark(spark_df, as_)
 
     def write_table(self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite") -> None:
+        require_qualified_table_name(name)
         spark = self._spark()
         to_spark(df, spark).write.mode(mode).format("delta").saveAsTable(
             self._resolve_table_name(name)

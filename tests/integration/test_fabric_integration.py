@@ -92,7 +92,7 @@ class TestFabricLakehouseWrite:
     ):
         fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")
         capsys.readouterr()
-        fabric_lakehouse.write_table(local_row_pandas, INTEGRATION_TABLE)
+        fabric_lakehouse.write_table(local_row_pandas, f"dbo.{INTEGRATION_TABLE}")
         entry = _metadata_tables(fabric_lakehouse._root)[INTEGRATION_TABLE]
         assert entry["state"] == "local"
         assert "converts it to a local table" in capsys.readouterr().out
@@ -101,28 +101,28 @@ class TestFabricLakehouseWrite:
         self, fabric_lakehouse, clean_integration_table, local_row_pandas
     ):
         fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")
-        fabric_lakehouse.write_table(local_row_pandas, INTEGRATION_TABLE, mode="overwrite")
+        fabric_lakehouse.write_table(local_row_pandas, f"dbo.{INTEGRATION_TABLE}", mode="overwrite")
         result = fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")
         assert len(result) == 1
 
     def test_append_accumulates_rows(self, fabric_lakehouse, clean_integration_table):
         fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")
         extra = pd.DataFrame({"id": [11], "name": ["Kate"], "value": [110.0]})
-        fabric_lakehouse.write_table(extra, INTEGRATION_TABLE, mode="append")
+        fabric_lakehouse.write_table(extra, f"dbo.{INTEGRATION_TABLE}", mode="append")
         result = fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")
         assert len(result) == 11
 
     def test_append_creates_table_when_missing(self, fabric_lakehouse, expected_pandas):
-        scratch = "integration_append_scratch"
+        scratch = "dbo.integration_append_scratch"
         fabric_lakehouse.write_table(expected_pandas.iloc[:2], scratch, mode="append")
-        result = fabric_lakehouse.read_table(scratch, as_="pandas")
+        result = fabric_lakehouse.read_table("integration_append_scratch", as_="pandas")
         assert len(result) == 2
 
     def test_reset_restores_fabric_mirror(
         self, fabric_lakehouse, clean_integration_table, local_row_pandas
     ):
         fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")
-        fabric_lakehouse.write_table(local_row_pandas, INTEGRATION_TABLE)
+        fabric_lakehouse.write_table(local_row_pandas, f"dbo.{INTEGRATION_TABLE}")
         fabric_lakehouse.reset_table(INTEGRATION_TABLE)
         result = fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")
         assert_frame_matches_spec(result)
@@ -133,7 +133,7 @@ class TestFabricLakehouseWrite:
         self, fabric_lakehouse, clean_integration_table, local_row_pandas, capsys
     ):
         fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")
-        fabric_lakehouse.write_table(local_row_pandas, INTEGRATION_TABLE)
+        fabric_lakehouse.write_table(local_row_pandas, f"dbo.{INTEGRATION_TABLE}")
         capsys.readouterr()
         fabric_lakehouse.refresh_table(INTEGRATION_TABLE)
         assert "local-only" in capsys.readouterr().out

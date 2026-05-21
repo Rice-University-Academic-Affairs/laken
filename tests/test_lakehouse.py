@@ -28,7 +28,7 @@ class TestLakehouseDispatch:
     def test_local_context_uses_local_lakehouse(self, tmp_path):
         lh = Lakehouse(root=tmp_path / "lakehouse")
         df = pd.DataFrame({"id": [1], "value": ["a"]})
-        lh.write_table(df, "products")
+        lh.write_table(df, "dbo.products")
         result = lh.read_table("products", as_="pandas")
         assert isinstance(lh._implementation, LocalLakehouse)
         assert result.equals(df)
@@ -77,10 +77,10 @@ class TestLakehouseDispatch:
         implementation.read_table.return_value = "result"
         with patch("laken.Lakehouse", return_value=implementation):
             assert laken.read_table("products", as_="pandas") == "result"
-            laken.write_table("features", pd.DataFrame({"id": [1]}))
+            laken.write_table("dbo.features", pd.DataFrame({"id": [1]}))
         implementation.read_table.assert_called_once_with("products", as_="pandas")
         implementation.write_table.assert_called_once()
-        assert implementation.write_table.call_args.args[1] == "features"
+        assert implementation.write_table.call_args.args[1] == "dbo.features"
 
 
 class TestLakehouseLocalOnlyMethods:
