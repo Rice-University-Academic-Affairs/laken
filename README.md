@@ -49,7 +49,9 @@ wheel before publishing to a Fabric environment.
 
 ## Develop against your Fabric lakehouse
 
-Set your credentials, select your workspace and lakehouse:
+Set your credentials, select your workspace and lakehouse in a `.env` file at your
+project root (or export them in your shell). Importing `laken` loads that file
+automatically; variables already set in the environment are not overwritten.
 
 ```env
 AZURE_TENANT_ID=...
@@ -118,7 +120,7 @@ def run_pipeline(lh: Lakehouse) -> None:
 When you are ready, `laken deploy` builds your package and loads it into your specified
 Fabric Environment.
 
-Deploy credentials (`.env` or shell):
+Deploy uses the same `.env` (or shell variables):
 
 ```env
 AZURE_TENANT_ID=...
@@ -229,6 +231,9 @@ from Fabric. Local-only tables are left unchanged.
 have been cached from Fabric first.
 
 ### Environment variables
+
+Root `.env` is loaded when you `import laken` or run the `laken` CLI. Shell and CI
+variables take precedence. Set `PYTHON_DOTENV_DISABLED=1` to skip loading.
 
 | Variable | Purpose |
 | :--- | :--- |

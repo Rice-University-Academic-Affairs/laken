@@ -5,7 +5,6 @@ from pathlib import Path
 import requests
 import typer
 
-import laken.deploy  # noqa: F401
 from laken.deploy.build import run_build
 from laken.deploy.config import load_deploy_config, require_project_root
 from laken.deploy.fabric_client import publish_wheel
@@ -60,23 +59,16 @@ def reset(table: str) -> None:
 
 def _print_status(rows: list[dict[str, str]]) -> None:
     headers = ["Table", "State", "Source version", "Notes"]
-    values = [
-        [row["table"], row["state"], row["source_version"], row["notes"]]
-        for row in rows
-    ]
+    values = [[row["table"], row["state"], row["source_version"], row["notes"]] for row in rows]
     widths = [
         max(len(headers[index]), *(len(row[index]) for row in values))
         if values
         else len(headers[index])
         for index in range(len(headers))
     ]
-    typer.echo(
-        " ".join(header.ljust(widths[index]) for index, header in enumerate(headers))
-    )
+    typer.echo(" ".join(header.ljust(widths[index]) for index, header in enumerate(headers)))
     for row in values:
-        typer.echo(
-            " ".join(value.ljust(widths[index]) for index, value in enumerate(row))
-        )
+        typer.echo(" ".join(value.ljust(widths[index]) for index, value in enumerate(row)))
 
 
 def _build_project() -> tuple[ProjectMetadata, Path]:

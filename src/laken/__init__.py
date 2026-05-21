@@ -1,3 +1,4 @@
+import laken._env  # noqa: F401
 from laken.fabric import FabricLakehouse
 from laken.lakehouse import Lakehouse
 from laken.local import LocalLakehouse
