@@ -2,43 +2,31 @@
 
 The missing local development workflow for Microsoft Fabric.
 
-`laken` lets you develop Python code for Fabric locally, using the tooling you
-already trust.
+Develop Python for Fabric on your laptop with the tools you already use. Read real
+lakehouse tables locally, run the same code in Fabric notebooks unchanged, and ship your
+package with `laken deploy` when you are ready.
 
-Write local code against real lakehouse data. The same code runs in Fabric
-without modification.
-
-When you're ready, `laken deploy` packages your project, publishes it to Fabric,
-and makes it available to your Fabric notebooks.
-
-Keep your code modular, your notebooks thin, and your local workflow intact.
+Keep code in a proper package, notebooks thin, and your local workflow intact.
 
 ## Installation
 
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/) if you do not have it
-yet, then:
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) if needed, then add
+`laken`:
 
 ```bash
 uv add laken
 ```
 
-or:
-
 ```bash
 pip install laken
 ```
 
-`laken deploy` expects [uv](https://docs.astral.sh/uv/getting-started/installation/) on
-`PATH` because it builds your application package before publishing it to Fabric.
+Deploy uses [uv](https://docs.astral.sh/uv/getting-started/installation/) to build your
+wheel before publishing to a Fabric environment.
 
 ## Develop against your lakehouse
 
-Point `laken` at your Fabric workspace and lakehouse, then use the same
-`Lakehouse` API locally and in notebooks. On your laptop, the first read of a
-Fabric table pulls it from OneLake and caches it under `.laken/` as Delta. Later
-reads stay fast and offline-friendly.
-
-Add credentials and Fabric targets to `.env` (or your shell environment):
+Set Azure credentials and which workspace/lakehouse to mirror locally:
 
 ```env
 AZURE_TENANT_ID=...
@@ -48,31 +36,50 @@ FABRIC_WORKSPACE_NAME=MyWorkspace
 FABRIC_LAKEHOUSE_NAME=MyLakehouse
 ```
 
-Optional: `FABRIC_WORKSPACE_ID` and `FABRIC_LAKEHOUSE_ID` for ID-based OneLake paths.
+Optional: `FABRIC_WORKSPACE_ID`, `FABRIC_LAKEHOUSE_ID`.
 
 ```python
-import polars as pl
-
 from laken import Lakehouse
 
 lh = Lakehouse()
+products = lh.read_table("marketing.products", as_="pandas")
 
-products = lh.read_table("marketing.products", as_="polars")
-
-enriched = products.with_columns(
-    margin_pct=(pl.col("revenue") - pl.col("cost")) / pl.col("revenue"),
-)
-
-lh.write_table(enriched, "marketing.products_enriched")
+lh.write_table(products, "staging.products_snapshot")
 ```
 
-Run that on your laptop: `read_table` hydrates from Fabric when needed; `write_table`
-stays in your local `.laken/workspace`. Run the same module in a Fabric notebook and
-`Lakehouse()` talks to the attached lakehouse with no code changes.
+On your laptop, the first `read_table` for a Fabric table pulls from OneLake and caches
+under `.laken/` as Delta; later reads use the cache. Local `write_table` stays local. In
+a Fabric notebook, the same calls use the attached lakehouse.
 
 ## Deploy to Fabric
 
-From your application repo root (the directory with `pyproject.toml`):
+Your repo is a normal Python package. `laken deploy` builds it and publishes the wheel to
+a Fabric environment so notebooks can import it by name.
+
+```
+myapp/
+├── pyproject.toml          # [project] name = "myapp"
+├── src/
+│   └── myapp/
+│       ├── __init__.py
+│       └── pipeline.py
+└── .env
+```
+
+The import path must match `[project].name` in `pyproject.toml` (here, `myapp`). Use a
+standard [src layout](https://packaging.python.org/en/latest/discussions/src-layout-vs-flat-layout/)
+and declare which packages go in the wheel — for example with hatchling:
+
+```toml
+[tool.hatch.build.targets.wheel]
+packages = ["src/myapp"]
+```
+
+Add `laken` to your project dependencies. See the
+[Python packaging guide](https://packaging.python.org/en/latest/tutorials/packaging-projects/)
+if you are setting this up for the first time.
+
+Deploy credentials (`.env` or shell):
 
 ```env
 AZURE_TENANT_ID=...
@@ -82,165 +89,119 @@ FABRIC_WORKSPACE_ID=...
 FABRIC_ENVIRONMENT_ID=...
 ```
 
+From the repo root:
+
 ```bash
 laken deploy
 ```
 
-`laken deploy` builds your wheel with `uv`, uploads it to the Fabric environment, and
-waits for the publish to be accepted. Your notebooks can import the package you just
-shipped.
+In a Fabric notebook, import your module like any installed package:
 
 ```python
-from myapp.reports import build_summary
+from myapp.pipeline import run_pipeline
 from laken import Lakehouse
 
-summary = build_summary(Lakehouse())
-display(summary)
+run_pipeline(Lakehouse())
 ```
-
-Keep business logic in your package; keep the notebook as a thin entry point.
 
 ## Reference
 
-### Python API
-
-Import the automatic dispatcher for most application code:
+### `Lakehouse`
 
 ```python
 from laken import Lakehouse
+
+lh = Lakehouse()
 ```
 
-Use explicit implementations when tests or scripts need a fixed backend:
+For tests or scripts that must pin a backend:
 
 ```python
 from laken import FabricLakehouse, LocalLakehouse
 ```
 
-#### Tables
+**Tables** — `mode` is `"overwrite"` or `"append"`; bare names use schema `dbo`.
 
 ```python
 lh.write_table(df, "products")
 lh.write_table(df, "marketing.products", mode="append")
 
-spark_df = lh.read_table("products")
-pandas_df = lh.read_table("products", as_="pandas")
-polars_df = lh.read_table("products", as_="polars")
+df = lh.read_table("products")                    # Spark
+df = lh.read_table("products", as_="pandas")
+df = lh.read_table("products", as_="polars")
 
-tables = lh.list_tables()
-exists = lh.table_exists("marketing.products")
+lh.list_tables()
+lh.table_exists("marketing.products")
 lh.drop_table("marketing.products")
 ```
 
-`mode` can be `"overwrite"` or `"append"`. Unqualified table names use the `dbo` schema.
-
-#### Files
+**Files** — local paths under `.laken/workspace/Files`; in Fabric, under the lakehouse
+`Files/` area.
 
 ```python
 lh.write_file(df, "exports/summary.parquet")
-
-spark_df = lh.read_file("exports/summary.parquet")
-pandas_df = lh.read_file("exports/summary.parquet", as_="pandas")
-
-files = lh.list_files("exports")
-exists = lh.file_exists("exports/summary.parquet")
+lh.read_file("exports/summary.parquet", as_="pandas")
+lh.list_files("exports")
+lh.file_exists("exports/summary.parquet")
 lh.delete_file("exports/summary.parquet")
 ```
 
-Local files live under `.laken/workspace/Files`. Fabric files resolve under the active
-lakehouse's `Files/` area.
-
-#### Warehouses
+**Warehouse tables** — Spark `synapsesql` in Fabric; local parquet stand-in for tests.
 
 ```python
-df = lh.load_table_from_warehouse(
-    "SalesOrderHeader",
-    "SalesWarehouse",
-    schema="dbo",
-    as_="pandas",
-)
+lh.load_table_from_warehouse("SalesOrderHeader", "SalesWarehouse", as_="pandas")
 ```
 
-In Fabric, this reads through Spark's `synapsesql` integration. Locally, it reads a
-parquet file path so application code can stay testable without a live warehouse.
-
-#### Cross-lakehouse reads and writes
+**Other lakehouses** — defaults come from notebook context in Fabric; override locally
+or in notebooks:
 
 ```python
 lh = Lakehouse(lakehouse="Sales_LH")
-df = lh.read_table("marketing.products", as_="pandas")
+lh.read_table("marketing.products", as_="pandas")
 ```
-
-Inside Fabric, workspace and lakehouse defaults come from notebook context. Pass
-`lakehouse`, `workspace_id`, or `workspace_name` when you need to target another
-lakehouse explicitly.
 
 ### CLI
 
 ```text
-laken deploy [--workspace-id <workspace-id>] [--environment-id <environment-id>]
+laken deploy [--workspace-id <id>] [--environment-id <id>]
 laken status
 laken refresh <table>
 laken reset <table>
 ```
 
-`status`, `refresh`, and `reset` operate on the project-local `.laken/` workspace.
+`status`, `refresh`, and `reset` apply to the local `.laken/` cache.
 
-Override the Fabric target for one deploy without changing `.env`:
+### Configuration
 
-```bash
-laken deploy --workspace-id <workspace-id> --environment-id <environment-id>
-```
-
-| Name | Used by |
+| Variable | Purpose |
 | --- | --- |
-| `AZURE_TENANT_ID` | Lakehouse fetch and deploy |
-| `AZURE_CLIENT_ID` | Lakehouse fetch and deploy |
-| `AZURE_CLIENT_SECRET` | Lakehouse fetch and deploy |
-| `FABRIC_WORKSPACE_NAME` | Local fetch (with `FABRIC_LAKEHOUSE_NAME`) |
-| `FABRIC_LAKEHOUSE_NAME` | Local fetch |
-| `FABRIC_WORKSPACE_ID` | Optional ID-based OneLake paths; required for deploy |
-| `FABRIC_LAKEHOUSE_ID` | Optional ID-based OneLake paths |
-| `FABRIC_ENVIRONMENT_ID` | Deploy target environment |
+| `AZURE_TENANT_ID` | Auth (fetch + deploy) |
+| `AZURE_CLIENT_ID` | Auth (fetch + deploy) |
+| `AZURE_CLIENT_SECRET` | Auth (fetch + deploy) |
+| `FABRIC_WORKSPACE_NAME` | Local table fetch |
+| `FABRIC_LAKEHOUSE_NAME` | Local table fetch |
+| `FABRIC_WORKSPACE_ID` | Optional OneLake IDs; required for deploy |
+| `FABRIC_LAKEHOUSE_ID` | Optional OneLake IDs |
+| `FABRIC_ENVIRONMENT_ID` | Deploy target |
 
-Your application repo should:
+Deploy expects `pyproject.toml` at the repo root, a buildable application wheel, and a
+Fabric environment with a compatible Python/Spark runtime.
 
-- contain a `pyproject.toml` at the command root
-- declare `laken` as a dependency
-- build one application package for Fabric to install
-- target a Fabric environment with a compatible Python and Spark runtime
+### Local vs Fabric
 
-With hatchling and a `src/` layout, configure wheel packages so tests and local files do
-not land in the deployed wheel:
-
-```toml
-[tool.hatch.build.targets.wheel]
-packages = ["src/myapp"]
-```
-
-### Local vs Fabric behavior
-
-| Class | Runtime | Storage |
+| Class | Where | Storage |
 | --- | --- | --- |
-| `Lakehouse` | Auto-detects Fabric notebook context | Fabric when available, otherwise local Delta |
-| `LocalLakehouse` | Any Python process | `.laken/workspace/Files` and `.laken/workspace/Tables` |
-| `FabricLakehouse` | Fabric notebook or Spark runtime | Fabric lakehouse files and Delta tables |
+| `Lakehouse` | Auto-detects notebook context | Fabric if available, else `.laken/` Delta |
+| `LocalLakehouse` | Laptop / CI | `.laken/workspace/` |
+| `FabricLakehouse` | Fabric notebook | Attached lakehouse |
 
-In local mode, `laken` reads and writes Delta tables in a project-local workspace under
-`.laken/`. The first time your code reads a Fabric lakehouse table, `laken` fetches
-that table from Fabric and stores it locally as Delta. Later reads use the local copy,
-so your development environment stays stable and fast.
-
-If the Fabric source changes, `laken` warns you that your local copy is stale. It does
-not replace local data automatically. Run `laken refresh <table>` when you want to
-update your local copy. Large tables are cached as fixed-size development samples and
-clearly marked as sampled.
-
-Local writes stay local. In Fabric, the same `read_table` and `write_table` calls
-resolve to the attached lakehouse.
+First local read of a Fabric table fetches and caches Delta under `.laken/`. If Fabric
+changes, `laken` warns and keeps the cache until you run `laken refresh <table>`. Large
+tables may cache as a fixed-size sample. Local writes do not push to Fabric.
 
 ## Development
 
-For contributors working on this repository:
+Contributors working on this repo:
 
 ```bash
 uv sync
