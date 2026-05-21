@@ -45,7 +45,8 @@ Use `uv run` — not bare `pytest`/`ruff` or `pip install -e .` unless the user 
 | Task | Command |
 |------|---------|
 | Install / refresh | `uv sync` |
-| All tests | `uv run pytest` |
+| All tests (unit + integration) | `uv run pytest` |
+| Unit tests only | `uv run pytest -m "not integration"` |
 | Deploy code only | `uv run pytest tests/deploy -q` |
 | Lint | `uv run ruff check` |
 | Format | `uv run ruff format` |
@@ -56,10 +57,22 @@ Step-by-step: `.cursor/skills/` — `/sync-dev-env`, `/run-tests`, `/run-lint`, 
 ## Developing this package
 
 - Edit only under `src/` and `tests/`
-- After `src/laken/deploy/` changes: `uv run pytest tests/deploy -q`; otherwise `uv run pytest`
+- **After any change to `src/` or `tests/`, run the full suite:** `uv run pytest` (unit and integration). Do not skip integration tests when credentials are available.
+- Deploy-only shortcut: after `src/laken/deploy/` changes, `uv run pytest tests/deploy -q` is not enough by itself — still run `uv run pytest` before finishing.
 - Match Ruff in `pyproject.toml` (line length 100, `py311`)
 - Minimal diffs; no docstrings or comments unless the user asks
 - Do not run live `laken deploy` against real Fabric unless the user explicitly asks
-- Tests are mocked; no live Fabric credentials required for pytest
+
+### Integration tests
+
+27 tests under `tests/integration/` are marked `integration`. They run with `uv run pytest` (no extra flags). They need live Azure/Fabric env vars:
+
+| Variable | Purpose |
+|----------|---------|
+| `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` | OAuth |
+| `FABRIC_WORKSPACE_NAME`, `FABRIC_LAKEHOUSE_NAME` | OneLake paths |
+| `FABRIC_WORKSPACE_ID`, `FABRIC_LAKEHOUSE_ID` | ID-based URIs and fixture seeding |
+
+If credentials are missing, those tests skip. If they are set (Cursor Cloud / CI with secrets), agents must run them and report pass/skip/fail.
 
 Human docs: [README.md](README.md).
