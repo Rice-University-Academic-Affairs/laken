@@ -29,6 +29,14 @@ def _is_fabric_context() -> bool:
     return bool(get("currentWorkspaceId") or get("currentWorkspaceName"))
 
 
+def _default_df_kind(implementation: LakehouseProtocol) -> DfKind:
+    from laken.fabric import FabricLakehouse
+
+    if isinstance(implementation, FabricLakehouse):
+        return "spark"
+    return "pandas"
+
+
 class Lakehouse:
     def __init__(
         self,
@@ -68,16 +76,17 @@ class Lakehouse:
         )
 
     @overload
-    def read_table(self, name: str, *, as_: Literal["spark"] = "spark") -> SparkDataFrame: ...
+    def read_table(self, name: str, *, as_: Literal["pandas"] = "pandas") -> pd.DataFrame: ...
 
     @overload
-    def read_table(self, name: str, *, as_: Literal["pandas"]) -> pd.DataFrame: ...
+    def read_table(self, name: str, *, as_: Literal["spark"]) -> SparkDataFrame: ...
 
     @overload
     def read_table(self, name: str, *, as_: Literal["polars"]) -> pl.DataFrame: ...
 
-    def read_table(self, name: str, *, as_: DfKind = "spark") -> OutputFrame:
-        return self._implementation.read_table(name, as_=as_)
+    def read_table(self, name: str, *, as_: DfKind | None = None) -> OutputFrame:
+        kind = _default_df_kind(self._implementation) if as_ is None else as_
+        return self._implementation.read_table(name, as_=kind)
 
     @overload
     def load_table_from_warehouse(
@@ -87,19 +96,19 @@ class Lakehouse:
         *,
         schema: str | None = "dbo",
         workspace_id: str | None = None,
-        as_: Literal["spark"] = "spark",
-    ) -> SparkDataFrame: ...
-
-    @overload
-    def load_table_from_warehouse(
-        self,
-        table_name: str,
-        warehouse_name: str,
-        *,
-        schema: str | None = "dbo",
-        workspace_id: str | None = None,
-        as_: Literal["pandas"],
+        as_: Literal["pandas"] = "pandas",
     ) -> pd.DataFrame: ...
+
+    @overload
+    def load_table_from_warehouse(
+        self,
+        table_name: str,
+        warehouse_name: str,
+        *,
+        schema: str | None = "dbo",
+        workspace_id: str | None = None,
+        as_: Literal["spark"],
+    ) -> SparkDataFrame: ...
 
     @overload
     def load_table_from_warehouse(
@@ -119,14 +128,15 @@ class Lakehouse:
         *,
         schema: str | None = "dbo",
         workspace_id: str | None = None,
-        as_: DfKind = "spark",
+        as_: DfKind | None = None,
     ) -> OutputFrame:
+        kind = _default_df_kind(self._implementation) if as_ is None else as_
         return self._implementation.load_table_from_warehouse(
             table_name,
             warehouse_name,
             schema=schema,
             workspace_id=workspace_id,
-            as_=as_,
+            as_=kind,
         )
 
     def write_table(self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite") -> None:
@@ -160,16 +170,17 @@ class Lakehouse:
         return status()
 
     @overload
-    def read_file(self, path: str, *, as_: Literal["spark"] = "spark") -> SparkDataFrame: ...
+    def read_file(self, path: str, *, as_: Literal["pandas"] = "pandas") -> pd.DataFrame: ...
 
     @overload
-    def read_file(self, path: str, *, as_: Literal["pandas"]) -> pd.DataFrame: ...
+    def read_file(self, path: str, *, as_: Literal["spark"]) -> SparkDataFrame: ...
 
     @overload
     def read_file(self, path: str, *, as_: Literal["polars"]) -> pl.DataFrame: ...
 
-    def read_file(self, path: str, *, as_: DfKind = "spark") -> OutputFrame:
-        return self._implementation.read_file(path, as_=as_)
+    def read_file(self, path: str, *, as_: DfKind | None = None) -> OutputFrame:
+        kind = _default_df_kind(self._implementation) if as_ is None else as_
+        return self._implementation.read_file(path, as_=kind)
 
     def write_file(self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite") -> None:
         self._implementation.write_file(df, path, mode=mode)

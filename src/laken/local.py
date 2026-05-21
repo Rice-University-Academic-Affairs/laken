@@ -251,16 +251,16 @@ class LocalLakehouse:
         return ", ".join(notes)
 
     @overload
-    def read_table(self, name: str, *, as_: Literal["spark"] = "spark") -> SparkDataFrame: ...
+    def read_table(self, name: str, *, as_: Literal["pandas"] = "pandas") -> pd.DataFrame: ...
 
     @overload
-    def read_table(self, name: str, *, as_: Literal["pandas"]) -> pd.DataFrame: ...
+    def read_table(self, name: str, *, as_: Literal["spark"]) -> SparkDataFrame: ...
 
     @overload
     def read_table(self, name: str, *, as_: Literal["polars"]) -> pl.DataFrame: ...
 
     def read_table(
-        self, name: str, *, as_: DfKind = "spark"
+        self, name: str, *, as_: DfKind = "pandas"
     ) -> SparkDataFrame | pd.DataFrame | pl.DataFrame:
         table_dir = self._table_dir(name)
         if not (table_dir / "_delta_log").is_dir():
@@ -276,8 +276,8 @@ class LocalLakehouse:
         *,
         schema: str | None = "dbo",
         workspace_id: str | None = None,
-        as_: Literal["spark"] = "spark",
-    ) -> SparkDataFrame: ...
+        as_: Literal["pandas"] = "pandas",
+    ) -> pd.DataFrame: ...
 
     @overload
     def load_table_from_warehouse(
@@ -287,8 +287,8 @@ class LocalLakehouse:
         *,
         schema: str | None = "dbo",
         workspace_id: str | None = None,
-        as_: Literal["pandas"],
-    ) -> pd.DataFrame: ...
+        as_: Literal["spark"],
+    ) -> SparkDataFrame: ...
 
     @overload
     def load_table_from_warehouse(
@@ -308,7 +308,7 @@ class LocalLakehouse:
         *,
         schema: str | None = "dbo",
         workspace_id: str | None = None,
-        as_: DfKind = "spark",
+        as_: DfKind = "pandas",
     ) -> SparkDataFrame | pd.DataFrame | pl.DataFrame:
         return self.read_file(table_name, as_=as_)
 
@@ -370,16 +370,16 @@ class LocalLakehouse:
         self._metadata.remove(self._table_key(name))
 
     @overload
-    def read_file(self, path: str, *, as_: Literal["spark"] = "spark") -> SparkDataFrame: ...
+    def read_file(self, path: str, *, as_: Literal["pandas"] = "pandas") -> pd.DataFrame: ...
 
     @overload
-    def read_file(self, path: str, *, as_: Literal["pandas"]) -> pd.DataFrame: ...
+    def read_file(self, path: str, *, as_: Literal["spark"]) -> SparkDataFrame: ...
 
     @overload
     def read_file(self, path: str, *, as_: Literal["polars"]) -> pl.DataFrame: ...
 
     def read_file(
-        self, path: str, *, as_: DfKind = "spark"
+        self, path: str, *, as_: DfKind = "pandas"
     ) -> SparkDataFrame | pd.DataFrame | pl.DataFrame:
         file_path = self._file_path(path)
         if not file_path.is_file():
