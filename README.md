@@ -12,14 +12,20 @@
 
 <br>
 
-**laken** lets you develop Python code for Fabric locally, using the tooling you already trust.
+**laken** lets you develop Python code for Fabric locally, using the tools you already trust.
 
-Write local code against real lakehouse data. The same code runs in Fabric without modification.
+Write code on your machine, run it against real Fabric lakehouse data.
 
 When you're ready, `laken deploy` packages your project, publishes it to Fabric, and makes it
 available to your Fabric notebooks.
 
-Keep your code modular, your notebooks thin, and your local workflow intact.
+Your code stays modular. Your notebooks stay thin. And your local workflow survives contact
+with the platform.
+
+## Why “laken”?
+
+*Laken*, pronounced **LAH-kuhn**, is Dutch for “cloth.” If you're feeling generous, it's a pun
+on Fabric and data lakes.
 
 ---
 
