@@ -99,7 +99,12 @@ class LocalLakehouse:
     def _fetch_and_cache(self, local_name: str, fetch_name: str) -> dict:
         if self._fabric_fetcher is None:
             raise FileNotFoundError(f"table not found: {local_name}")
-        info = self._fabric_fetcher.inspect_table(fetch_name)
+        try:
+            info = self._fabric_fetcher.inspect_table(fetch_name)
+        except Exception as err:
+            if type(err).__name__ != "TableNotFoundError":
+                raise
+            raise FileNotFoundError(f"table not found: {local_name}") from err
         table_dir = self._table_dir(local_name)
         key = self._table_key(local_name)
         size_bytes = info.size_bytes

@@ -4,6 +4,25 @@ import pytest
 
 from laken import LocalLakehouse
 
+_FABRIC_ENV_VARS = (
+    "FABRIC_WORKSPACE_NAME",
+    "FABRIC_LAKEHOUSE_NAME",
+    "FABRIC_WORKSPACE_ID",
+    "FABRIC_LAKEHOUSE_ID",
+    "FABRIC_ENVIRONMENT_ID",
+    "AZURE_TENANT_ID",
+    "AZURE_CLIENT_ID",
+    "AZURE_CLIENT_SECRET",
+)
+
+
+@pytest.fixture(autouse=True)
+def isolate_unit_test_fabric_env(request, monkeypatch):
+    if request.node.get_closest_marker("integration"):
+        return
+    for name in _FABRIC_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+
 
 @pytest.fixture
 def lakehouse(tmp_path):

@@ -70,7 +70,7 @@ def test_onelake_fetcher_uses_oauth_and_fabric_delta(mock_post, mock_delta, monk
     mock_post.return_value.json.return_value = {"access_token": "tok-123"}
     mock_dt = mock_delta.return_value
     mock_dt.version.return_value = 9
-    mock_dt.metadata.return_value = MagicMock(num_rows=2)
+    mock_dt.metadata.return_value = MagicMock()
     mock_dt.to_pyarrow_table.return_value = pa.table({"id": [1, 2]})
 
     fetcher = OneLakeFabricFetcher(workspace_name="MyWorkspace", lakehouse="Sales_LH")
@@ -80,6 +80,7 @@ def test_onelake_fetcher_uses_oauth_and_fabric_delta(mock_post, mock_delta, monk
     token_call = mock_post.call_args
     assert token_call.args[0] == "https://login.microsoftonline.com/tenant-id/oauth2/v2.0/token"
     assert token_call.kwargs["data"]["grant_type"] == "client_credentials"
+    assert token_call.kwargs["data"]["scope"] == "https://storage.azure.com/.default"
     assert mock_delta.call_args.kwargs["storage_options"]["bearer_token"] == "tok-123"
     assert mock_delta.call_args.kwargs["storage_options"]["use_fabric_endpoint"] == "true"
     assert (
