@@ -1,33 +1,10 @@
+from unittest.mock import MagicMock, patch
+
 import pyarrow as pa
+from fake_fabric_fetcher import FakeFabricFetcher
 
 from laken import LocalLakehouse
-from laken.onelake_fetcher import default_fabric_fetcher
-from laken.workspace import FabricTableInfo
-
-
-class FakeFabricFetcher:
-    def __init__(self):
-        self.tables = {}
-
-    def add(self, name: str, table: pa.Table, *, version: int, size_bytes: int) -> None:
-        self.tables[name] = {
-            "table": table,
-            "info": FabricTableInfo(
-                table=name,
-                delta_version=version,
-                size_bytes=size_bytes,
-                row_count=table.num_rows,
-            ),
-        }
-
-    def inspect_table(self, name: str) -> FabricTableInfo:
-        return self.tables[name]["info"]
-
-    def fetch_table(self, name: str, *, limit: int | None = None) -> pa.Table:
-        table = self.tables[name]["table"]
-        if limit is None:
-            return table
-        return table.slice(0, limit)
+from laken.onelake_fetcher import OneLakeFabricFetcher, default_fabric_fetcher
 
 
 def test_default_fabric_fetcher_without_credentials_returns_none(monkeypatch):
@@ -35,6 +12,31 @@ def test_default_fabric_fetcher_without_credentials_returns_none(monkeypatch):
     monkeypatch.delenv("AZURE_CLIENT_ID", raising=False)
     monkeypatch.delenv("AZURE_CLIENT_SECRET", raising=False)
     assert default_fabric_fetcher(workspace_name="WS", lakehouse="Sales_LH") is None
+
+
+def test_default_fabric_fetcher_with_credentials_returns_fetcher(monkeypatch):
+    monkeypatch.setenv("AZURE_TENANT_ID", "tenant")
+    monkeypatch.setenv("AZURE_CLIENT_ID", "client")
+    monkeypatch.setenv("AZURE_CLIENT_SECRET", "secret")
+    monkeypatch.setenv("FABRIC_WORKSPACE_NAME", "MyWorkspace")
+    monkeypatch.setenv("FABRIC_LAKEHOUSE_NAME", "Sales_LH")
+    monkeypatch.setenv("FABRIC_WORKSPACE_ID", "ws-id")
+
+    fetcher = default_fabric_fetcher()
+
+    assert isinstance(fetcher, OneLakeFabricFetcher)
+    assert fetcher._workspace_name == "MyWorkspace"
+    assert fetcher._lakehouse == "Sales_LH"
+    assert fetcher._workspace_id == "ws-id"
+
+
+def test_default_fabric_fetcher_credentials_without_workspace_returns_none(monkeypatch):
+    monkeypatch.setenv("AZURE_TENANT_ID", "tenant")
+    monkeypatch.setenv("AZURE_CLIENT_ID", "client")
+    monkeypatch.setenv("AZURE_CLIENT_SECRET", "secret")
+    monkeypatch.delenv("FABRIC_WORKSPACE_NAME", raising=False)
+    monkeypatch.delenv("FABRIC_LAKEHOUSE_NAME", raising=False)
+    assert default_fabric_fetcher() is None
 
 
 def test_local_fetch_name_resolution_with_workspace_context(tmp_path):
@@ -56,3 +58,53 @@ def test_local_fetch_name_resolution_with_workspace_context(tmp_path):
     result = lakehouse.read_table("marketing.products", as_="pandas")
 
     assert result["id"].tolist() == [1]
+
+
+@patch("laken.onelake_fetcher.DeltaTable")
+@patch("laken.onelake_fetcher.requests.post")
+def test_onelake_fetcher_uses_oauth_and_fabric_delta(mock_post, mock_delta, monkeypatch):
+    monkeypatch.setenv("AZURE_TENANT_ID", "tenant-id")
+    monkeypatch.setenv("AZURE_CLIENT_ID", "client-id")
+    monkeypatch.setenv("AZURE_CLIENT_SECRET", "client-secret")
+    mock_post.return_value.raise_for_status.return_value = None
+    mock_post.return_value.json.return_value = {"access_token": "tok-123"}
+    mock_dt = mock_delta.return_value
+    mock_dt.version.return_value = 9
+    mock_dt.metadata.return_value = MagicMock(num_rows=2)
+    mock_dt.to_pyarrow_table.return_value = pa.table({"id": [1, 2]})
+
+    fetcher = OneLakeFabricFetcher(workspace_name="MyWorkspace", lakehouse="Sales_LH")
+    info = fetcher.inspect_table("marketing.products")
+    table = fetcher.fetch_table("marketing.products", limit=1)
+
+    token_call = mock_post.call_args
+    assert token_call.args[0] == "https://login.microsoftonline.com/tenant-id/oauth2/v2.0/token"
+    assert token_call.kwargs["data"]["grant_type"] == "client_credentials"
+    assert mock_delta.call_args.kwargs["storage_options"]["bearer_token"] == "tok-123"
+    assert mock_delta.call_args.kwargs["storage_options"]["use_fabric_endpoint"] == "true"
+    assert (
+        mock_delta.call_args.args[0] == "abfss://MyWorkspace@onelake.dfs.fabric.microsoft.com/"
+        "Sales_LH.Lakehouse/Tables/marketing/products"
+    )
+    assert info.table == "MyWorkspace.Sales_LH.marketing.products"
+    assert info.delta_version == 9
+    assert table.num_rows == 1
+
+
+@patch("laken.onelake_fetcher.DeltaTable")
+@patch("laken.onelake_fetcher.requests.post")
+def test_onelake_fetcher_dbo_table_uri(mock_post, mock_delta, monkeypatch):
+    monkeypatch.setenv("AZURE_TENANT_ID", "tenant-id")
+    monkeypatch.setenv("AZURE_CLIENT_ID", "client-id")
+    monkeypatch.setenv("AZURE_CLIENT_SECRET", "client-secret")
+    mock_post.return_value.raise_for_status.return_value = None
+    mock_post.return_value.json.return_value = {"access_token": "tok"}
+    mock_delta.return_value.version.return_value = 1
+    mock_delta.return_value.metadata.return_value = None
+    mock_delta.return_value.to_pyarrow_table.return_value = pa.table({"id": [1]})
+
+    fetcher = OneLakeFabricFetcher(workspace_name="WS", lakehouse="LH")
+    fetcher.inspect_table("products")
+
+    uri = mock_delta.call_args.args[0]
+    assert uri.endswith("LH.Lakehouse/Tables/products")
