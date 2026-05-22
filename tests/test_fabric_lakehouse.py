@@ -239,24 +239,52 @@ class TestFabricDefaultLakehouse:
             "rb",
         )
 
-    @patch("laken.fabric_lakehouse.get_or_create_spark_session")
-    @patch("laken.fabric_lakehouse.to_spark")
+    @patch("laken.fabric_lakehouse.to_arrow")
     @patch("laken.fabric_lakehouse.FabricLakehouse._notebookutils")
-    def test_write_file_parquet(
-        self, mock_nu_fn, mock_to_spark, mock_spark_fn, mock_spark, mock_notebookutils
+    def test_write_file_parquet_writes_single_file(
+        self, mock_nu_fn, mock_to_arrow, mock_notebookutils
     ):
         mock_nu_fn.return_value = mock_notebookutils
-        mock_spark_fn.return_value = mock_spark
-        spark_df = MagicMock()
-        mock_to_spark.return_value = spark_df
-        writer = MagicMock()
-        spark_df.write = writer
-        writer.mode.return_value = writer
-        writer.format.return_value = writer
+        mock_to_arrow.return_value = pa.table({"id": [1], "value": ["a"]})
+        mock_handle = MagicMock()
+        mock_notebookutils.fs.open.return_value.__enter__.return_value = mock_handle
         lh = FabricLakehouse()
         lh.write_file(MagicMock(), "data/sample.parquet")
-        writer.format.assert_called_with("parquet")
-        writer.save.assert_called_with("Files/data/sample.parquet")
+        mock_notebookutils.fs.open.assert_called_once_with("Files/data/sample.parquet", "wb")
+        mock_handle.write.assert_called_once()
+        assert mock_handle.write.call_args.args[0][:4] == b"PAR1"
+
+    @patch("laken.fabric_lakehouse.FabricLakehouse._notebookutils")
+    def test_read_file_parquet_merges_spark_parts(self, mock_nu_fn, mock_notebookutils):
+        import pyarrow.parquet as pq
+
+        mock_nu_fn.return_value = mock_notebookutils
+        mock_notebookutils.fs.exists.return_value = True
+        entry0 = MagicMock()
+        entry0.name = "part-00000-a.parquet"
+        entry1 = MagicMock()
+        entry1.name = "part-00001-b.parquet"
+        mock_notebookutils.fs.ls.return_value = [entry0, entry1]
+        part0 = pa.BufferOutputStream()
+        pq.write_table(pa.table({"id": [1]}), part0)
+        part1 = pa.BufferOutputStream()
+        pq.write_table(pa.table({"id": [2]}), part1)
+        part_bytes = {
+            "Files/data/sample.parquet/part-00000-a.parquet": part0.getvalue().to_pybytes(),
+            "Files/data/sample.parquet/part-00001-b.parquet": part1.getvalue().to_pybytes(),
+        }
+
+        def open_file(path, mode):
+            context = MagicMock()
+            handle = MagicMock()
+            handle.read.return_value = part_bytes[path]
+            context.__enter__.return_value = handle
+            return context
+
+        mock_notebookutils.fs.open.side_effect = open_file
+        lh = FabricLakehouse()
+        data = lh.read_file("data/sample.parquet")
+        assert pq.read_table(pa.BufferReader(data))["id"].to_pylist() == [1, 2]
 
     @patch("laken.fabric_lakehouse.FabricLakehouse._notebookutils")
     def test_file_exists(self, mock_nu_fn, mock_notebookutils):

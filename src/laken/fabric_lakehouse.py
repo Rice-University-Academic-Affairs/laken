@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.csv as pacsv
+import pyarrow.parquet as pq
 
 from laken.frames import from_spark, to_arrow, to_spark
 from laken.logger import ensure_logging, logger
@@ -127,10 +128,8 @@ class FabricLakehouse:
         if suffix == ".csv":
             _write_fabric_csv(nu, resolved_path, to_arrow(data), mode=mode)
             return
-        spark = self._spark()
-        spark_df = to_spark(data, spark)
         if suffix == ".parquet":
-            spark_df.write.mode(mode).format("parquet").save(resolved_path)
+            _write_fabric_parquet(nu, resolved_path, to_arrow(data), mode=mode)
             return
         raise ValueError(f"unsupported file extension for dataframe write: {suffix}")
 
@@ -140,16 +139,14 @@ class FabricLakehouse:
         if nu.fs.exists(resolved_path):
             return True
         suffix = Path(path).suffix.lower()
-        return _fabric_spark_part_path(nu, resolved_path, suffix=suffix) is not None
+        return bool(_fabric_spark_part_paths(nu, resolved_path, suffix=suffix))
 
     def delete_file(self, path: str) -> None:
         nu = self._notebookutils()
         resolved_path = self._file_path(path)
         suffix = Path(path).suffix.lower()
-        if _fabric_spark_part_path(nu, resolved_path, suffix=suffix) is not None:
-            nu.fs.rm(resolved_path, recurse=True)
-            return
-        nu.fs.rm(resolved_path, recurse=False)
+        recurse = bool(_fabric_spark_part_paths(nu, resolved_path, suffix=suffix))
+        nu.fs.rm(resolved_path, recurse=recurse)
 
     def _table_ref(self, name: str) -> TableRef:
         ref = resolve_table_ref(
@@ -234,33 +231,76 @@ def _fabric_ls(nu, path: str) -> list:
     return nu.fs.ls(path)
 
 
-def _fabric_spark_part_path(nu, resolved_path: str, *, suffix: str) -> str | None:
+def _fabric_spark_part_paths(nu, resolved_path: str, *, suffix: str) -> list[str]:
     if not nu.fs.exists(resolved_path):
-        return None
+        return []
     try:
         entries = _fabric_ls(nu, resolved_path)
     except Exception:
-        return None
+        return []
     part_names = sorted(
         name
         for name in (_fabric_entry_name(entry) for entry in entries)
         if name.startswith("part-") and name.endswith(suffix)
     )
     if not part_names:
-        return None
+        return []
     base = resolved_path.rstrip("/")
-    return f"{base}/{part_names[0]}"
+    return [f"{base}/{name}" for name in part_names]
 
 
 def _read_fabric_file_bytes(nu, resolved_path: str, *, suffix: str) -> bytes:
-    part_path = _fabric_spark_part_path(nu, resolved_path, suffix=suffix)
-    if part_path is not None:
-        with nu.fs.open(part_path, "rb") as handle:
+    if suffix == ".parquet":
+        return _read_fabric_parquet_bytes(nu, resolved_path)
+    return _read_fabric_flat_or_part_bytes(nu, resolved_path, suffix=suffix)
+
+
+def _read_fabric_flat_or_part_bytes(nu, resolved_path: str, *, suffix: str) -> bytes:
+    part_paths = _fabric_spark_part_paths(nu, resolved_path, suffix=suffix)
+    if part_paths:
+        with nu.fs.open(part_paths[0], "rb") as handle:
             return handle.read()
     if not nu.fs.exists(resolved_path):
         raise FileNotFoundError(f"file not found: {resolved_path}")
     with nu.fs.open(resolved_path, "rb") as handle:
         return handle.read()
+
+
+def _read_fabric_parquet_bytes(nu, resolved_path: str) -> bytes:
+    part_paths = _fabric_spark_part_paths(nu, resolved_path, suffix=".parquet")
+    if part_paths:
+        if len(part_paths) == 1:
+            with nu.fs.open(part_paths[0], "rb") as handle:
+                return handle.read()
+        tables = []
+        for part_path in part_paths:
+            with nu.fs.open(part_path, "rb") as handle:
+                tables.append(pq.read_table(pa.BufferReader(handle.read())))
+        sink = pa.BufferOutputStream()
+        pq.write_table(pa.concat_tables(tables), sink)
+        return sink.getvalue().to_pybytes()
+    if not nu.fs.exists(resolved_path):
+        raise FileNotFoundError(f"file not found: {resolved_path}")
+    with nu.fs.open(resolved_path, "rb") as handle:
+        return handle.read()
+
+
+def _write_fabric_parquet(
+    nu,
+    resolved_path: str,
+    arrow_table: pa.Table,
+    *,
+    mode: WriteMode,
+) -> None:
+    if mode == "append" and nu.fs.exists(resolved_path):
+        existing = pq.read_table(pa.BufferReader(_read_fabric_parquet_bytes(nu, resolved_path)))
+        arrow_table = pa.concat_tables([existing, arrow_table])
+    if nu.fs.exists(resolved_path):
+        nu.fs.rm(resolved_path, recurse=True)
+    sink = pa.BufferOutputStream()
+    pq.write_table(arrow_table, sink)
+    with nu.fs.open(resolved_path, "wb") as handle:
+        handle.write(sink.getvalue().to_pybytes())
 
 
 def _write_fabric_csv(
