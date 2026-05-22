@@ -1,3 +1,5 @@
 from dotenv import load_dotenv
 
-load_dotenv(override=False)
+
+def load_environment() -> None:
+    load_dotenv(override=False)

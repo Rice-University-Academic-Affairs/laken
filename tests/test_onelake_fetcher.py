@@ -112,7 +112,7 @@ def test_local_fetch_name_resolution_with_workspace_context(tmp_path):
         lakehouse="Sales_LH",
     )
 
-    result = lakehouse.read_table("marketing.products", as_="pandas")
+    result = lakehouse.read_table("marketing.products", frame_type="pandas")
 
     assert result["id"].tolist() == [1]
 

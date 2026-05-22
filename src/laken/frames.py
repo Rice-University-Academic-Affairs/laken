@@ -3,11 +3,15 @@ import polars as pl
 import pyarrow as pa
 from pyarrow import Table as ArrowTable
 
-from laken._spark import get_or_create_spark_session, spark_dataframe_type, spark_import_error
-from laken.types import DfKind, InputFrame, OutputFrame
+from laken.spark_runtime import (
+    get_or_create_spark_session,
+    spark_dataframe_type,
+    spark_import_error,
+)
+from laken.types import DataFrameTypeName, InputFrame, OutputFrame
 
 
-def kind_of(df: InputFrame) -> DfKind:
+def dataframe_kind(df: InputFrame) -> DataFrameTypeName:
     if isinstance(df, pd.DataFrame):
         return "pandas"
     if isinstance(df, pl.DataFrame):
@@ -23,7 +27,7 @@ def kind_of(df: InputFrame) -> DfKind:
 
 
 def to_arrow(df: InputFrame) -> ArrowTable:
-    kind = kind_of(df)
+    kind = dataframe_kind(df)
     if kind == "pandas":
         return pa.Table.from_pandas(df)
     if kind == "polars":
@@ -33,12 +37,12 @@ def to_arrow(df: InputFrame) -> ArrowTable:
 
 def from_arrow(
     table: ArrowTable,
-    as_: DfKind,
+    frame_type: DataFrameTypeName,
     spark=None,
 ) -> OutputFrame:
-    if as_ == "pandas":
+    if frame_type == "pandas":
         return table.to_pandas()
-    if as_ == "polars":
+    if frame_type == "polars":
         return pl.from_arrow(table)
     try:
         if spark is None:
@@ -49,7 +53,7 @@ def from_arrow(
 
 
 def to_spark(df: InputFrame, spark) -> OutputFrame:
-    kind = kind_of(df)
+    kind = dataframe_kind(df)
     if kind == "spark":
         return df
     if kind == "pandas":
@@ -57,9 +61,9 @@ def to_spark(df: InputFrame, spark) -> OutputFrame:
     return spark.createDataFrame(df.to_pandas())
 
 
-def from_spark(spark_df, as_: DfKind) -> OutputFrame:
-    if as_ == "spark":
+def from_spark(spark_df, frame_type: DataFrameTypeName) -> OutputFrame:
+    if frame_type == "spark":
         return spark_df
-    if as_ == "pandas":
+    if frame_type == "pandas":
         return spark_df.toPandas()
     return pl.from_pandas(spark_df.toPandas())

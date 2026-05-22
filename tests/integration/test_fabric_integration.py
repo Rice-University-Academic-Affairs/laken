@@ -8,7 +8,7 @@ from integration.conftest import (
     assert_frame_matches_spec,
 )
 
-from laken.frames import from_arrow, kind_of
+from laken.frames import dataframe_kind, from_arrow
 
 pytestmark = pytest.mark.integration
 
@@ -46,103 +46,105 @@ class TestFabricFetcher:
 
 class TestFabricLakehouseRead:
     def test_read_table_hydrates(self, fabric_lakehouse, df_kind):
-        result = fabric_lakehouse.read_table(INTEGRATION_TABLE, as_=df_kind)
-        assert kind_of(result) == df_kind
+        result = fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type=df_kind)
+        assert dataframe_kind(result) == df_kind
         assert_frame_matches_spec(result)
         assert (fabric_lakehouse._table_dir(INTEGRATION_TABLE) / "_delta_log").is_dir()
 
-    def test_read_table_second_read_uses_cache(self, fabric_lakehouse, capsys):
-        first = fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")
-        capsys.readouterr()
-        second = fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")
+    def test_read_table_second_read_uses_cache(self, fabric_lakehouse, capture_laken_logs):
+        first = fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
+        capture_laken_logs.clear()
+        second = fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
         assert first.equals(second)
-        assert "fetching" not in capsys.readouterr().out
+        assert "Fetching" not in capture_laken_logs.text
 
     def test_table_exists_after_hydrate(self, fabric_lakehouse):
-        fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")
+        fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
         assert fabric_lakehouse.table_exists(INTEGRATION_TABLE)
 
     def test_list_tables_includes_hydrated_table(self, fabric_lakehouse):
-        fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")
+        fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
         assert f"dbo.{INTEGRATION_TABLE}" in fabric_lakehouse.list_tables()
 
     def test_read_missing_raises(self, fabric_lakehouse):
         with pytest.raises(FileNotFoundError):
-            fabric_lakehouse.read_table("missing_integration_table", as_="pandas")
+            fabric_lakehouse.read_table("missing_integration_table", frame_type="pandas")
 
 
 class TestFabricLakehouseRefresh:
-    def test_refresh_updates_mirror(self, fabric_lakehouse, capsys):
-        fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")
-        capsys.readouterr()
+    def test_refresh_updates_mirror(self, fabric_lakehouse, capture_laken_logs):
+        fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
+        capture_laken_logs.clear()
         fabric_lakehouse.refresh_table(INTEGRATION_TABLE)
-        result = fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")
+        result = fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
         assert_frame_matches_spec(result)
-        assert "refreshed" in capsys.readouterr().out
+        assert "Refreshed" in capture_laken_logs.text
         entry = _metadata_tables(fabric_lakehouse._root)[INTEGRATION_TABLE]
         assert entry["state"] == "mirror"
         assert entry["cache"]["remote_size_bytes"] > 0
 
     def test_status_reports_mirror(self, fabric_lakehouse):
-        fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")
+        fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
         rows = {row["table"]: row for row in fabric_lakehouse.status()}
         assert rows[INTEGRATION_TABLE]["state"] == "mirror"
 
 
 class TestFabricLakehouseWrite:
     def test_write_converts_mirror_to_local(
-        self, fabric_lakehouse, clean_integration_table, local_row_pandas, capsys
+        self, fabric_lakehouse, clean_integration_table, local_row_pandas, capture_laken_logs
     ):
-        fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")
-        capsys.readouterr()
+        fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
+        start = len(capture_laken_logs.records)
         fabric_lakehouse.write_table(local_row_pandas, INTEGRATION_TABLE)
         entry = _metadata_tables(fabric_lakehouse._root)[INTEGRATION_TABLE]
         assert entry["state"] == "local"
-        assert "converts it to a local table" in capsys.readouterr().out
+        messages = [record.message for record in capture_laken_logs.records[start:]]
+        assert any("converts it to a local table" in message for message in messages)
 
     def test_overwrite_replaces_rows(
         self, fabric_lakehouse, clean_integration_table, local_row_pandas
     ):
-        fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")
+        fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
         fabric_lakehouse.write_table(local_row_pandas, INTEGRATION_TABLE, mode="overwrite")
-        result = fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")
+        result = fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
         assert len(result) == 1
 
     def test_append_accumulates_rows(self, fabric_lakehouse, clean_integration_table):
-        fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")
+        fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
         extra = pd.DataFrame({"id": [11], "name": ["Kate"], "value": [110.0]})
         fabric_lakehouse.write_table(extra, INTEGRATION_TABLE, mode="append")
-        result = fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")
+        result = fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
         assert len(result) == 11
 
     def test_append_creates_table_when_missing(self, fabric_lakehouse, expected_pandas):
         scratch = "integration_append_scratch"
         fabric_lakehouse.write_table(expected_pandas.iloc[:2], scratch, mode="append")
-        result = fabric_lakehouse.read_table(scratch, as_="pandas")
+        result = fabric_lakehouse.read_table(scratch, frame_type="pandas")
         assert len(result) == 2
 
     def test_reset_restores_fabric_mirror(
         self, fabric_lakehouse, clean_integration_table, local_row_pandas
     ):
-        fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")
+        fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
         fabric_lakehouse.write_table(local_row_pandas, INTEGRATION_TABLE)
         fabric_lakehouse.reset_table(INTEGRATION_TABLE)
-        result = fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")
+        result = fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
         assert_frame_matches_spec(result)
         entry = _metadata_tables(fabric_lakehouse._root)[INTEGRATION_TABLE]
         assert entry["state"] == "mirror"
 
     def test_refresh_local_only_is_noop(
-        self, fabric_lakehouse, clean_integration_table, local_row_pandas, capsys
+        self, fabric_lakehouse, clean_integration_table, local_row_pandas, capture_laken_logs
     ):
-        fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")
+        fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
         fabric_lakehouse.write_table(local_row_pandas, INTEGRATION_TABLE)
-        capsys.readouterr()
+        start = len(capture_laken_logs.records)
         fabric_lakehouse.refresh_table(INTEGRATION_TABLE)
-        assert "local-only" in capsys.readouterr().out
+        messages = [record.message for record in capture_laken_logs.records[start:]]
+        assert any("local-only" in message for message in messages)
 
     def test_drop_table_removes_local_cache(self, fabric_lakehouse, clean_integration_table):
-        fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")
+        fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
         assert INTEGRATION_TABLE in _metadata_tables(fabric_lakehouse._root)
         fabric_lakehouse.drop_table(INTEGRATION_TABLE)
         assert not fabric_lakehouse.table_exists(INTEGRATION_TABLE)
@@ -154,8 +156,8 @@ class TestFabricLakehouseFiles:
         arrow = fabric_fetcher.fetch_file(INTEGRATION_CSV)
         frame = from_arrow(arrow, df_kind)
         fabric_lakehouse.write_file(frame, "integration/scratch.parquet")
-        result = fabric_lakehouse.read_file("integration/scratch.parquet", as_=df_kind)
-        assert kind_of(result) == df_kind
+        result = fabric_lakehouse.read_file("integration/scratch.parquet", frame_type=df_kind)
+        assert dataframe_kind(result) == df_kind
         assert_frame_matches_spec(result)
 
     def test_local_file_overwrite(self, fabric_lakehouse, fabric_fetcher):
@@ -164,7 +166,7 @@ class TestFabricLakehouseFiles:
         fabric_lakehouse.write_file(frame, "integration/overwrite.parquet")
         replacement = pd.DataFrame({"id": [99], "name": ["Z"], "value": [0.0]})
         fabric_lakehouse.write_file(replacement, "integration/overwrite.parquet", mode="overwrite")
-        result = fabric_lakehouse.read_file("integration/overwrite.parquet", as_="pandas")
+        result = fabric_lakehouse.read_file("integration/overwrite.parquet", frame_type="pandas")
         assert len(result) == 1
 
     def test_local_file_append(self, fabric_lakehouse, fabric_fetcher):
@@ -173,7 +175,7 @@ class TestFabricLakehouseFiles:
         fabric_lakehouse.write_file(frame, "integration/append.parquet")
         extra = pd.DataFrame({"id": [11], "name": ["Kate"], "value": [110.0]})
         fabric_lakehouse.write_file(extra, "integration/append.parquet", mode="append")
-        result = fabric_lakehouse.read_file("integration/append.parquet", as_="pandas")
+        result = fabric_lakehouse.read_file("integration/append.parquet", frame_type="pandas")
         assert len(result) == 11
 
     def test_list_files_nested(self, fabric_lakehouse, fabric_fetcher):

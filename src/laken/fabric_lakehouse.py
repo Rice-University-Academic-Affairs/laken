@@ -1,20 +1,16 @@
 from __future__ import annotations
 
-from typing import Literal, overload
-
-import pandas as pd
-import polars as pl
-
-from laken._spark import SparkDataFrame, get_or_create_spark_session
 from laken.frames import from_spark, to_spark
-from laken.paths import (
+from laken.logger import logger
+from laken.spark_runtime import get_or_create_spark_session
+from laken.table_names import (
     format_fabric_table_name,
     format_table_name,
     is_four_part_table_name,
     parse_table_name,
     resolve_spark_table_name,
 )
-from laken.types import DfKind, InputFrame, WriteMode
+from laken.types import DataFrameTypeName, InputFrame, OutputFrame, WriteMode
 
 
 def _fabric_constants():
@@ -37,6 +33,11 @@ class FabricLakehouse:
         self._lakehouse = lakehouse or ctx.get("defaultLakehouseName")
         self._workspace_id = workspace_id or ctx.get("currentWorkspaceId")
         self._workspace_name = workspace_name or ctx.get("currentWorkspaceName")
+        logger.debug(
+            "FabricLakehouse ready (lakehouse=%s, workspace=%s)",
+            self._lakehouse,
+            self._workspace_name,
+        )
 
     def _spark(self):
         return get_or_create_spark_session()
@@ -91,59 +92,19 @@ class FabricLakehouse:
             return f"Files/{normalized}" if normalized else "Files"
         return f"{self._abfss_root()}Files/{normalized}"
 
-    @overload
-    def read_table(self, name: str, *, as_: Literal["spark"] = "spark") -> SparkDataFrame: ...
-
-    @overload
-    def read_table(self, name: str, *, as_: Literal["pandas"]) -> pd.DataFrame: ...
-
-    @overload
-    def read_table(self, name: str, *, as_: Literal["polars"]) -> pl.DataFrame: ...
-
     def read_table(
         self,
         name: str,
         *,
-        as_: DfKind = "spark",
+        frame_type: DataFrameTypeName = "spark",
         max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
-    ) -> SparkDataFrame | pd.DataFrame | pl.DataFrame:
+    ) -> OutputFrame:
+        resolved = self._resolve_table_name(name)
+        logger.debug("Reading %s from Fabric table %s", name, resolved)
         spark = self._spark()
-        spark_df = spark.read.table(self._resolve_table_name(name))
-        return from_spark(spark_df, as_)
-
-    @overload
-    def load_table_from_warehouse(
-        self,
-        table_name: str,
-        warehouse_name: str,
-        *,
-        schema: str | None = "dbo",
-        workspace_id: str | None = None,
-        as_: Literal["spark"] = "spark",
-    ) -> SparkDataFrame: ...
-
-    @overload
-    def load_table_from_warehouse(
-        self,
-        table_name: str,
-        warehouse_name: str,
-        *,
-        schema: str | None = "dbo",
-        workspace_id: str | None = None,
-        as_: Literal["pandas"],
-    ) -> pd.DataFrame: ...
-
-    @overload
-    def load_table_from_warehouse(
-        self,
-        table_name: str,
-        warehouse_name: str,
-        *,
-        schema: str | None = "dbo",
-        workspace_id: str | None = None,
-        as_: Literal["polars"],
-    ) -> pl.DataFrame: ...
+        spark_df = spark.read.table(resolved)
+        return from_spark(spark_df, frame_type)
 
     def load_table_from_warehouse(
         self,
@@ -152,8 +113,10 @@ class FabricLakehouse:
         *,
         schema: str | None = "dbo",
         workspace_id: str | None = None,
-        as_: DfKind = "spark",
-    ) -> SparkDataFrame | pd.DataFrame | pl.DataFrame:
+        frame_type: DataFrameTypeName = "spark",
+    ) -> OutputFrame:
+        warehouse_table = self._resolve_warehouse_table_name(table_name, warehouse_name, schema)
+        logger.debug("Loading warehouse table %s via synapsesql", warehouse_table)
         constants = _fabric_constants()
         spark_df = (
             self._spark()
@@ -161,9 +124,9 @@ class FabricLakehouse:
                 constants.WorkspaceId,
                 self._resolve_warehouse_workspace_id(workspace_id),
             )
-            .synapsesql(self._resolve_warehouse_table_name(table_name, warehouse_name, schema))
+            .synapsesql(warehouse_table)
         )
-        return from_spark(spark_df, as_)
+        return from_spark(spark_df, frame_type)
 
     def write_table(self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite") -> None:
         spark = self._spark()
@@ -195,21 +158,12 @@ class FabricLakehouse:
         spark = self._spark()
         spark.catalog.dropTable(self._resolve_table_name(name), ignoreIfNotExists=True)
 
-    @overload
-    def read_file(self, path: str, *, as_: Literal["spark"] = "spark") -> SparkDataFrame: ...
-
-    @overload
-    def read_file(self, path: str, *, as_: Literal["pandas"]) -> pd.DataFrame: ...
-
-    @overload
-    def read_file(self, path: str, *, as_: Literal["polars"]) -> pl.DataFrame: ...
-
-    def read_file(
-        self, path: str, *, as_: DfKind = "spark"
-    ) -> SparkDataFrame | pd.DataFrame | pl.DataFrame:
+    def read_file(self, path: str, *, frame_type: DataFrameTypeName = "spark") -> OutputFrame:
+        resolved_path = self._file_path(path)
+        logger.debug("Reading Fabric file %s", resolved_path)
         spark = self._spark()
-        spark_df = spark.read.parquet(self._file_path(path))
-        return from_spark(spark_df, as_)
+        spark_df = spark.read.parquet(resolved_path)
+        return from_spark(spark_df, frame_type)
 
     def write_file(self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite") -> None:
         spark = self._spark()

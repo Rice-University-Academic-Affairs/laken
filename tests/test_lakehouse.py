@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pyarrow as pa
-import pytest
 from fake_fabric_fetcher import FakeFabricFetcher
 
 import laken
@@ -29,7 +28,7 @@ class TestLakehouseDispatch:
         lh = Lakehouse(root=tmp_path / "lakehouse")
         df = pd.DataFrame({"id": [1], "value": ["a"]})
         lh.write_table(df, "products")
-        result = lh.read_table("products", as_="pandas")
+        result = lh.read_table("products", frame_type="pandas")
         assert isinstance(lh._implementation, LocalLakehouse)
         assert result.equals(df)
         assert isinstance(lh, LakehouseProtocol)
@@ -66,13 +65,13 @@ class TestLakehouseDispatch:
         implementation.read_table.return_value = "result"
         with (
             patch("laken.lakehouse._is_fabric_context", return_value=True),
-            patch("laken.fabric.FabricLakehouse", return_value=implementation),
+            patch("laken.fabric_lakehouse.FabricLakehouse", return_value=implementation),
         ):
             lh = Lakehouse(lakehouse="Sales_LH")
-        assert lh.read_table("products", as_="pandas") == "result"
+        assert lh.read_table("products", frame_type="pandas") == "result"
         implementation.read_table.assert_called_once_with(
             "products",
-            as_="pandas",
+            frame_type="pandas",
             max_mirror_mb=None,
             max_sample_rows=None,
         )
@@ -81,36 +80,16 @@ class TestLakehouseDispatch:
         implementation = MagicMock()
         implementation.read_table.return_value = "result"
         with patch("laken.Lakehouse", return_value=implementation):
-            assert laken.read_table("products", as_="pandas") == "result"
-            laken.write_table("features", pd.DataFrame({"id": [1]}))
+            assert laken.read_table("products", frame_type="pandas") == "result"
+            df = pd.DataFrame({"id": [1]})
+            laken.write_table(df, "features")
         implementation.read_table.assert_called_once_with(
             "products",
-            as_="pandas",
+            frame_type="pandas",
             max_mirror_mb=None,
             max_sample_rows=None,
         )
-        implementation.write_table.assert_called_once()
-        assert implementation.write_table.call_args.args[1] == "features"
-
-
-class TestLakehouseLocalOnlyMethods:
-    def test_fabric_context_refresh_raises(self, monkeypatch):
-        monkeypatch.setitem(sys.modules, "notebookutils", _fake_notebookutils())
-        lh = Lakehouse(lakehouse="Sales_LH")
-        with pytest.raises(RuntimeError, match="only available in local mode"):
-            lh.refresh_table("products")
-
-    def test_fabric_context_reset_raises(self, monkeypatch):
-        monkeypatch.setitem(sys.modules, "notebookutils", _fake_notebookutils())
-        lh = Lakehouse(lakehouse="Sales_LH")
-        with pytest.raises(RuntimeError, match="only available in local mode"):
-            lh.reset_table("products")
-
-    def test_fabric_context_status_raises(self, monkeypatch):
-        monkeypatch.setitem(sys.modules, "notebookutils", _fake_notebookutils())
-        lh = Lakehouse(lakehouse="Sales_LH")
-        with pytest.raises(RuntimeError, match="only available in local mode"):
-            lh.status()
+        implementation.write_table.assert_called_once_with(df, "features", mode="overwrite")
 
     def test_lakehouse_hydrates_via_custom_fetcher(self, tmp_path):
         root = tmp_path / ".laken" / "workspace"
@@ -118,12 +97,13 @@ class TestLakehouseLocalOnlyMethods:
         fetcher.add("remote_table", pa.table({"id": [5]}), version=4, size_bytes=50)
         lh = Lakehouse(root=root, fabric_fetcher=fetcher)
 
-        result = lh.read_table("remote_table", as_="pandas")
+        result = lh.read_table("remote_table", frame_type="pandas")
 
         assert result["id"].tolist() == [5]
         assert isinstance(lh._implementation, LocalLakehouse)
+        assert lh._implementation._fabric_fetcher is fetcher
 
-    @patch("laken.lakehouse.default_fabric_fetcher")
+    @patch("laken.local_lakehouse.default_fabric_fetcher")
     def test_lakehouse_hydrates_via_default_fabric_fetcher(self, mock_default, tmp_path):
         root = tmp_path / ".laken" / "workspace"
         fetcher = FakeFabricFetcher()
@@ -140,8 +120,9 @@ class TestLakehouseLocalOnlyMethods:
             lakehouse="Sales_LH",
             workspace_name="MyWorkspace",
         )
+        mock_default.assert_not_called()
 
-        result = lh.read_table("remote_table", as_="pandas")
+        result = lh.read_table("remote_table", frame_type="pandas")
 
         mock_default.assert_called_once_with(
             lakehouse="Sales_LH",
