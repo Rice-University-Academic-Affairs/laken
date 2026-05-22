@@ -157,9 +157,9 @@ class LocalLakehouse:
 
     def read_file(self, path: str) -> bytes:
         file_path = self._file_path(path)
-        if file_path.is_file():
+        if file_path.is_file() or _parquet_dataset_dir(file_path).is_dir():
             logger.debug("Reading local file %s", path)
-            return file_path.read_bytes()
+            return _read_stored_file_bytes(file_path)
         fabric_fetcher = self._resolve_fabric_fetcher()
         if fabric_fetcher is None:
             raise FileNotFoundError(f"file not found: {path}")
@@ -173,21 +173,18 @@ class LocalLakehouse:
         file_path = self._file_path(path)
         arrow_table = to_arrow(df)
         if mode == "overwrite":
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            pq.write_table(arrow_table, file_path)
+            _write_parquet_overwrite(file_path, arrow_table)
             return
-        if file_path.is_file():
-            existing = pq.read_table(file_path)
-            pq.write_table(pa.concat_tables([existing, arrow_table]), file_path)
-            return
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        pq.write_table(arrow_table, file_path)
+        _write_parquet_append(file_path, arrow_table)
 
     def file_exists(self, path: str) -> bool:
-        return self._file_path(path).exists()
+        file_path = self._file_path(path)
+        return file_path.is_file() or _parquet_dataset_dir(file_path).is_dir()
 
     def delete_file(self, path: str) -> None:
-        self._file_path(path).unlink(missing_ok=True)
+        file_path = self._file_path(path)
+        file_path.unlink(missing_ok=True)
+        shutil.rmtree(_parquet_dataset_dir(file_path), ignore_errors=True)
 
     def refresh_table(self, name: str) -> None:
         key = self._table_key(name)
@@ -501,6 +498,39 @@ class LocalLakehouse:
         if normalized.is_absolute() or ".." in normalized.parts:
             raise ValueError(f"invalid file path: {path}")
         return self._root / "Files" / normalized
+
+
+def _parquet_dataset_dir(file_path: Path) -> Path:
+    return file_path.parent / f"{file_path.name}.d"
+
+
+def _read_stored_file_bytes(file_path: Path) -> bytes:
+    dataset_dir = _parquet_dataset_dir(file_path)
+    if dataset_dir.is_dir():
+        sink = pa.BufferOutputStream()
+        pq.write_table(pq.read_table(dataset_dir), sink)
+        return sink.getvalue().to_pybytes()
+    return file_path.read_bytes()
+
+
+def _write_parquet_overwrite(file_path: Path, arrow_table: pa.Table) -> None:
+    shutil.rmtree(_parquet_dataset_dir(file_path), ignore_errors=True)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(arrow_table, file_path)
+
+
+def _write_parquet_append(file_path: Path, arrow_table: pa.Table) -> None:
+    dataset_dir = _parquet_dataset_dir(file_path)
+    if file_path.is_file():
+        dataset_dir.mkdir(parents=True, exist_ok=True)
+        file_path.rename(dataset_dir / "part-00000.parquet")
+    elif not dataset_dir.is_dir():
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        pq.write_table(arrow_table, file_path)
+        return
+    dataset_dir.mkdir(parents=True, exist_ok=True)
+    part_count = len(list(dataset_dir.glob("part-*.parquet")))
+    pq.write_table(arrow_table, dataset_dir / f"part-{part_count:05d}.parquet")
 
 
 def _format_bytes(size_bytes: int) -> str:

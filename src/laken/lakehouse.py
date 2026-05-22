@@ -185,8 +185,12 @@ def _is_fabric_context() -> bool:
     except ImportError:
         return False
     try:
-        context = notebookutils.runtime.context
-    except Exception:
+        runtime = notebookutils.runtime
+    except AttributeError:
+        return False
+    try:
+        context = runtime.context
+    except AttributeError:
         return False
     get = getattr(context, "get", None)
     if not callable(get):

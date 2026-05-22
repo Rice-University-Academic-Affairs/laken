@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
@@ -24,6 +26,18 @@ class TestLocalFiles:
         result = from_arrow(pq.read_table(pa.BufferReader(data)), "pandas")
         assert len(result) == 1
         assert result.iloc[0]["id"] == 99
+
+    def test_append_writes_part_file_without_reading_existing(self, lakehouse, sample_pandas):
+        import pandas as pd
+
+        lakehouse.write_file(sample_pandas, "data/sample.parquet")
+        with patch.object(pq, "read_table") as read_table:
+            extra = pd.DataFrame({"id": [3], "value": ["c"]})
+            lakehouse.write_file(extra, "data/sample.parquet", mode="append")
+        read_table.assert_not_called()
+        dataset = lakehouse._file_path("data/sample.parquet").parent / "sample.parquet.d"
+        assert dataset.is_dir()
+        assert len(list(dataset.glob("part-*.parquet"))) == 2
 
     def test_append_adds_rows(self, lakehouse, sample_pandas):
         import pandas as pd

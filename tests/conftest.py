@@ -29,9 +29,6 @@ def isolate_unit_test_fabric_env(request, monkeypatch):
 @pytest.fixture
 def capture_laken_logs(caplog):
     caplog.set_level(logging.INFO, logger="laken")
-    for handler in list(logging.getLogger("laken").handlers):
-        if type(handler) is logging.StreamHandler:
-            logging.getLogger("laken").removeHandler(handler)
     return caplog
 
 

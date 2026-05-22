@@ -4,17 +4,21 @@ import logging
 
 logger = logging.getLogger("laken")
 
-_handler = logging.StreamHandler()
-_handler.setFormatter(logging.Formatter("laken: %(message)s"))
-_handler.setLevel(logging.INFO)
-logger.addHandler(_handler)
-logger.setLevel(logging.DEBUG)
-
-
 DEBUG = logging.DEBUG
 INFO = logging.INFO
 
 
+def _ensure_stream_handler() -> None:
+    for handler in logger.handlers:
+        if isinstance(handler, logging.StreamHandler):
+            return
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("laken: %(message)s"))
+    logger.addHandler(handler)
+
+
 def set_log_level(level: int = INFO) -> None:
+    _ensure_stream_handler()
     logger.setLevel(level)
-    _handler.setLevel(level)
+    for handler in logger.handlers:
+        handler.setLevel(level)

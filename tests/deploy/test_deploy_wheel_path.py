@@ -1,6 +1,7 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from packaging.version import Version
 from typer.testing import CliRunner
 
 from laken.cli import app
@@ -24,7 +25,7 @@ def test_deploy_uploads_wheel_from_build_not_dist_resolution(tmp_path, monkeypat
         uploaded.append(wheel_path)
 
     with (
-        patch("laken.cli._build_project", return_value=(metadata, built)),
+        patch("laken.cli._build_project", return_value=(metadata, built, Version("2.0.0"))),
         patch("laken.cli._upload_project", side_effect=capture_upload),
         patch("laken.cli.load_deploy_config"),
         patch("laken.cli.publish_wheel"),
