@@ -236,6 +236,17 @@ unchanged.
 `laken reset <table>` throws away local edits and downloads from Fabric again. The table
 must have come from Fabric originally.
 
+### Logging
+
+laken logs to stderr when you use `Lakehouse` or the CLI. Default level is INFO. To see
+more detail:
+
+```python
+import logging
+
+logging.getLogger("laken").setLevel(logging.DEBUG)
+```
+
 ### Environment variables
 
 Root `.env` is loaded when you construct `Lakehouse` or `LocalLakehouse`, or run the
