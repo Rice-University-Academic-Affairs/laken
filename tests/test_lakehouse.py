@@ -70,7 +70,12 @@ class TestLakehouseDispatch:
         ):
             lh = Lakehouse(lakehouse="Sales_LH")
         assert lh.read_table("products", as_="pandas") == "result"
-        implementation.read_table.assert_called_once_with("products", as_="pandas")
+        implementation.read_table.assert_called_once_with(
+            "products",
+            as_="pandas",
+            max_mirror_mb=None,
+            max_sample_rows=None,
+        )
 
     def test_module_functions_use_default_lakehouse(self):
         implementation = MagicMock()
@@ -78,7 +83,12 @@ class TestLakehouseDispatch:
         with patch("laken.Lakehouse", return_value=implementation):
             assert laken.read_table("products", as_="pandas") == "result"
             laken.write_table("features", pd.DataFrame({"id": [1]}))
-        implementation.read_table.assert_called_once_with("products", as_="pandas")
+        implementation.read_table.assert_called_once_with(
+            "products",
+            as_="pandas",
+            max_mirror_mb=None,
+            max_sample_rows=None,
+        )
         implementation.write_table.assert_called_once()
         assert implementation.write_table.call_args.args[1] == "features"
 

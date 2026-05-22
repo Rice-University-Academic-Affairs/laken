@@ -101,7 +101,12 @@ class FabricLakehouse:
     def read_table(self, name: str, *, as_: Literal["polars"]) -> pl.DataFrame: ...
 
     def read_table(
-        self, name: str, *, as_: DfKind = "spark"
+        self,
+        name: str,
+        *,
+        as_: DfKind = "spark",
+        max_mirror_mb: int | None = None,
+        max_sample_rows: int | None = None,
     ) -> SparkDataFrame | pd.DataFrame | pl.DataFrame:
         spark = self._spark()
         spark_df = spark.read.table(self._resolve_table_name(name))

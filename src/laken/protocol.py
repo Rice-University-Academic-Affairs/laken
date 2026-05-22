@@ -12,15 +12,43 @@ from laken.types import DfKind, InputFrame, OutputFrame, WriteMode
 @runtime_checkable
 class LakehouseProtocol(Protocol):
     @overload
-    def read_table(self, name: str, *, as_: Literal["pandas"] = "pandas") -> pd.DataFrame: ...
+    def read_table(
+        self,
+        name: str,
+        *,
+        as_: Literal["pandas"] = "pandas",
+        max_mirror_mb: int | None = None,
+        max_sample_rows: int | None = None,
+    ) -> pd.DataFrame: ...
 
     @overload
-    def read_table(self, name: str, *, as_: Literal["spark"]) -> SparkDataFrame: ...
+    def read_table(
+        self,
+        name: str,
+        *,
+        as_: Literal["spark"],
+        max_mirror_mb: int | None = None,
+        max_sample_rows: int | None = None,
+    ) -> SparkDataFrame: ...
 
     @overload
-    def read_table(self, name: str, *, as_: Literal["polars"]) -> pl.DataFrame: ...
+    def read_table(
+        self,
+        name: str,
+        *,
+        as_: Literal["polars"],
+        max_mirror_mb: int | None = None,
+        max_sample_rows: int | None = None,
+    ) -> pl.DataFrame: ...
 
-    def read_table(self, name: str, *, as_: DfKind | None = None) -> OutputFrame: ...
+    def read_table(
+        self,
+        name: str,
+        *,
+        as_: DfKind | None = None,
+        max_mirror_mb: int | None = None,
+        max_sample_rows: int | None = None,
+    ) -> OutputFrame: ...
 
     @overload
     def load_table_from_warehouse(

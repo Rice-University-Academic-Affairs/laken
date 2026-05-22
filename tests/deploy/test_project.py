@@ -15,9 +15,7 @@ def test_reads_project_metadata(tmp_path):
 
 def test_dynamic_version_has_no_pin(tmp_path):
     pyproject = tmp_path / "pyproject.toml"
-    pyproject.write_text(
-        "[project]\nname = 'my-app'\ndynamic = ['version']\n"
-    )
+    pyproject.write_text("[project]\nname = 'my-app'\ndynamic = ['version']\n")
 
     metadata = read_project_metadata(pyproject)
 

@@ -160,21 +160,23 @@ class OneLakeFabricFetcher:
             lakehouse=self._lakehouse,
         )
         fabric_name = format_fabric_table_name(workspace_name, lakehouse, schema, table)
-        num_rows = None
+        actions = delta_table.get_add_actions()
+        size_bytes = sum(
+            value for value in actions.column("size_bytes").to_pylist() if value is not None
+        )
         return FabricTableInfo(
             table=fabric_name,
             delta_version=delta_table.version(),
             workspace_id=self._workspace_id,
             lakehouse_id=self._lakehouse_id,
-            row_count=num_rows,
-            size_bytes=None,
+            size_bytes=size_bytes,
         )
 
-    def fetch_table(self, name: str, *, limit: int | None = None) -> pa.Table:
-        table = self._delta_table(name).to_pyarrow_table()
-        if limit is not None:
-            return table.slice(0, limit)
-        return table
+    def fetch_table(self, name: str, *, max_rows: int | None = None) -> pa.Table:
+        delta_table = self._delta_table(name)
+        if max_rows is None:
+            return delta_table.to_pyarrow_table()
+        return delta_table.to_pyarrow_dataset().head(max_rows)
 
     def fetch_file(self, path: str) -> pa.Table:
         normalized = path.replace("\\", "/").lstrip("/")

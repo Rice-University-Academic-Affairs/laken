@@ -45,9 +45,7 @@ def test_publish_wheel_accepts_http_200_and_202(monkeypatch, tmp_path, capsys):
     publish_wheel(config=_config(), wheel_path=wheel)
 
     token_call, upload_call, publish_call = post.call_args_list
-    assert token_call.args[0] == (
-        "https://login.microsoftonline.com/tenant/oauth2/v2.0/token"
-    )
+    assert token_call.args[0] == ("https://login.microsoftonline.com/tenant/oauth2/v2.0/token")
     assert token_call.kwargs["data"]["scope"] == "https://api.fabric.microsoft.com/.default"
     assert upload_call.args[0] == (
         f"{BASE_URL}/workspaces/workspace/environments/environment"

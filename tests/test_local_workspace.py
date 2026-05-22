@@ -59,20 +59,20 @@ def test_large_table_hydrates_fixed_sample(tmp_path, capsys):
     lakehouse = LocalLakehouse(
         root=root,
         fabric_fetcher=fetcher,
-        max_full_cache_bytes=100,
-        sample_rows=3,
+        max_mirror_mb=0,
+        max_sample_rows=3,
     )
 
     result = lakehouse.read_table("fact_events", as_="pandas")
 
     assert result["id"].tolist() == [1, 2, 3]
-    assert fetcher.limits == [3]
+    assert fetcher.max_rows == [3]
     entry = _metadata(root)["fact_events"]
     assert entry["state"] == "sample"
-    assert entry["cache"]["sample_rows"] == 3
+    assert entry["cache"]["max_sample_rows"] == 3
     output = capsys.readouterr().out
-    assert "laken: fact_events is too large to cache in full." in output
-    assert "laken: cached a 3-row development sample instead." in output
+    assert "over 0 MB limit" in output
+    assert "laken: caching a 3-row development sample instead." in output
 
 
 def test_write_to_mirror_converts_to_local_and_reset_restores_fabric(tmp_path, capsys):
@@ -107,12 +107,12 @@ def test_status_marks_stale_and_sample_tables(tmp_path):
     root = tmp_path / ".laken" / "workspace"
     fetcher = FakeFabricFetcher()
     fetcher.add("raw_faculty", pa.table({"id": [1]}), version=1, size_bytes=100)
-    fetcher.add("fact_events", pa.table({"id": [1, 2, 3]}), version=7, size_bytes=500)
+    fetcher.add("fact_events", pa.table({"id": [1, 2, 3]}), version=7, size_bytes=2_000_000)
     lakehouse = LocalLakehouse(
         root=root,
         fabric_fetcher=fetcher,
-        max_full_cache_bytes=100,
-        sample_rows=2,
+        max_mirror_mb=1,
+        max_sample_rows=2,
     )
     lakehouse.read_table("raw_faculty", as_="pandas")
     lakehouse.read_table("fact_events", as_="pandas")
@@ -150,17 +150,17 @@ def test_refresh_sample_table_re_fetches(tmp_path):
     lakehouse = LocalLakehouse(
         root=root,
         fabric_fetcher=fetcher,
-        max_full_cache_bytes=100,
-        sample_rows=2,
+        max_mirror_mb=0,
+        max_sample_rows=2,
     )
     lakehouse.read_table("fact_events", as_="pandas")
-    fetcher.limits.clear()
+    fetcher.max_rows.clear()
     fetcher.add("fact_events", pa.table({"id": [100, 101, 102]}), version=6, size_bytes=500)
 
     lakehouse.refresh_table("fact_events")
 
     assert lakehouse.read_table("fact_events", as_="pandas")["id"].tolist() == [100, 101]
-    assert fetcher.limits == [2]
+    assert fetcher.max_rows == [2]
     assert _metadata(root)["fact_events"]["source"]["delta_version"] == 6
 
 
@@ -206,24 +206,38 @@ def test_status_freshness_unknown_when_inspect_fails(tmp_path):
     assert rows["raw_faculty"]["notes"] == "freshness unknown"
 
 
-def test_cache_boundary_at_max_full_cache_bytes_uses_mirror(tmp_path):
+def test_cache_boundary_at_max_mirror_mb_uses_mirror(tmp_path):
     root = tmp_path / ".laken" / "workspace"
     fetcher = FakeFabricFetcher()
-    fetcher.add("boundary", pa.table({"id": [1, 2]}), version=1, size_bytes=100)
+    fetcher.add("boundary", pa.table({"id": [1, 2]}), version=1, size_bytes=1_000_000)
     lakehouse = LocalLakehouse(
         root=root,
         fabric_fetcher=fetcher,
-        max_full_cache_bytes=100,
+        max_mirror_mb=1,
     )
     lakehouse.read_table("boundary", as_="pandas")
     assert _metadata(root)["boundary"]["state"] == "mirror"
-    assert fetcher.limits == [None]
+    assert fetcher.max_rows == [None]
 
-    fetcher.limits.clear()
-    fetcher.add("boundary2", pa.table({"id": [1]}), version=1, size_bytes=101)
+    fetcher.max_rows.clear()
+    fetcher.add("boundary2", pa.table({"id": [1]}), version=1, size_bytes=1_000_001)
     lakehouse.read_table("boundary2", as_="pandas")
     assert _metadata(root)["boundary2"]["state"] == "sample"
-    assert fetcher.limits == [10000]
+    assert fetcher.max_rows == [10000]
+
+
+def test_read_table_override_cache_thresholds(tmp_path):
+    root = tmp_path / ".laken" / "workspace"
+    fetcher = FakeFabricFetcher()
+    fetcher.add("wide", pa.table({"id": [1]}), version=1, size_bytes=200)
+    lakehouse = LocalLakehouse(
+        root=root,
+        fabric_fetcher=fetcher,
+        max_mirror_mb=0,
+    )
+    lakehouse.read_table("wide", as_="pandas", max_mirror_mb=1)
+    assert _metadata(root)["wide"]["state"] == "mirror"
+    assert fetcher.max_rows == [None]
 
 
 def test_hydrate_four_part_name_without_workspace_context(tmp_path):
@@ -287,7 +301,7 @@ def test_refresh_uses_stored_four_part_source_table(tmp_path):
     assert _metadata(root)["marketing.products"]["source"]["table"] == fabric_name
     fetcher.inspect_names.clear()
     fetcher.fetch_names.clear()
-    fetcher.limits.clear()
+    fetcher.max_rows.clear()
     fetcher.add(fabric_name, pa.table({"id": [2]}), version=2, size_bytes=100)
 
     lakehouse.refresh_table("marketing.products")

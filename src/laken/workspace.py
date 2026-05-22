@@ -7,8 +7,12 @@ from typing import Protocol
 
 import pyarrow as pa
 
-MAX_FULL_CACHE_BYTES = 1_000_000_000
-DEFAULT_SAMPLE_ROWS = 10_000
+DEFAULT_MAX_MIRROR_MB = 100
+DEFAULT_MAX_SAMPLE_ROWS = 10_000
+
+
+def mirror_limit_bytes(max_mirror_mb: int) -> int:
+    return max_mirror_mb * 1_000_000
 
 
 @dataclass(frozen=True)
@@ -17,14 +21,13 @@ class FabricTableInfo:
     delta_version: int
     workspace_id: str | None = None
     lakehouse_id: str | None = None
-    row_count: int | None = None
     size_bytes: int | None = None
 
 
 class FabricTableFetcher(Protocol):
     def inspect_table(self, name: str) -> FabricTableInfo: ...
 
-    def fetch_table(self, name: str, *, limit: int | None = None) -> pa.Table: ...
+    def fetch_table(self, name: str, *, max_rows: int | None = None) -> pa.Table: ...
 
 
 class TableMetadataStore:

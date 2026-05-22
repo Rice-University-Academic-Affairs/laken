@@ -54,7 +54,5 @@ def resolve_wheel(project_name: str, project_version: str | None = None) -> tupl
         )
     if len(wheels) > 1:
         names = ", ".join(wheel.name for wheel in wheels)
-        raise RuntimeError(
-            f"Multiple wheels found for {project_name!r} {target}: {names}"
-        )
+        raise RuntimeError(f"Multiple wheels found for {project_name!r} {target}: {names}")
     return wheels[0], target

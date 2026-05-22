@@ -6,7 +6,7 @@ from laken.workspace import FabricTableInfo
 class FakeFabricFetcher:
     def __init__(self, *, inspect_errors: dict[str, Exception] | None = None):
         self.tables: dict[str, dict] = {}
-        self.limits: list[int | None] = []
+        self.max_rows: list[int | None] = []
         self.inspect_names: list[str] = []
         self.fetch_names: list[str] = []
         self.inspect_errors = inspect_errors or {}
@@ -28,7 +28,6 @@ class FakeFabricFetcher:
                 delta_version=version,
                 workspace_id=workspace_id,
                 lakehouse_id=lakehouse_id,
-                row_count=table.num_rows,
                 size_bytes=size_bytes,
             ),
         }
@@ -39,10 +38,10 @@ class FakeFabricFetcher:
             raise self.inspect_errors[name]
         return self.tables[name]["info"]
 
-    def fetch_table(self, name: str, *, limit: int | None = None) -> pa.Table:
+    def fetch_table(self, name: str, *, max_rows: int | None = None) -> pa.Table:
         self.fetch_names.append(name)
-        self.limits.append(limit)
+        self.max_rows.append(max_rows)
         table = self.tables[name]["table"]
-        if limit is None:
+        if max_rows is None:
             return table
-        return table.slice(0, limit)
+        return table.slice(0, max_rows)
