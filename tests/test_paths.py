@@ -1,6 +1,12 @@
 import pytest
 
-from laken.table_names import format_table_name, parse_table_name, resolve_spark_table_name
+from laken.table_names import (
+    TableRef,
+    format_table_name,
+    parse_table_name,
+    resolve_spark_table_name,
+    resolve_table_ref,
+)
 
 
 class TestParseTableName:
@@ -16,9 +22,29 @@ class TestParseTableName:
             "products",
         )
 
-    def test_three_part_name_raises(self):
-        with pytest.raises(ValueError):
-            parse_table_name("workspace.lakehouse.table")
+    def test_three_part_workspace_lakehouse_table(self):
+        ref = resolve_table_ref(
+            "MyWorkspace.Sales_LH.products",
+            workspace_name="MyWorkspace",
+            lakehouse_name="Sales_LH",
+        )
+        assert ref == TableRef(
+            workspace="MyWorkspace",
+            lakehouse="Sales_LH",
+            schema="dbo",
+            table="products",
+        )
+
+    def test_three_part_lakehouse_schema_table(self):
+        ref = resolve_table_ref(
+            "Sales_LH.marketing.products",
+            lakehouse_name="Sales_LH",
+        )
+        assert ref == TableRef(
+            lakehouse="Sales_LH",
+            schema="marketing",
+            table="products",
+        )
 
     def test_empty_raises(self):
         with pytest.raises(ValueError):

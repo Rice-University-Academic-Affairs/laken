@@ -6,7 +6,6 @@ import pandas as pd
 import pyarrow as pa
 from fake_fabric_fetcher import FakeFabricFetcher
 
-import laken
 from laken import FabricLakehouse, Lakehouse, LakehouseProtocol, LocalLakehouse
 from laken.lakehouse import _is_fabric_context
 
@@ -76,21 +75,6 @@ class TestLakehouseDispatch:
             max_sample_rows=None,
         )
 
-    def test_module_functions_use_default_lakehouse(self):
-        implementation = MagicMock()
-        implementation.read_table.return_value = "result"
-        with patch("laken.Lakehouse", return_value=implementation):
-            assert laken.read_table("products", frame_type="pandas") == "result"
-            df = pd.DataFrame({"id": [1]})
-            laken.write_table(df, "features")
-        implementation.read_table.assert_called_once_with(
-            "products",
-            frame_type="pandas",
-            max_mirror_mb=None,
-            max_sample_rows=None,
-        )
-        implementation.write_table.assert_called_once_with(df, "features", mode="overwrite")
-
     def test_lakehouse_hydrates_via_custom_fetcher(self, tmp_path):
         root = tmp_path / ".laken" / "workspace"
         fetcher = FakeFabricFetcher()
@@ -119,6 +103,8 @@ class TestLakehouseDispatch:
             root=root,
             lakehouse="Sales_LH",
             workspace_name="MyWorkspace",
+            workspace_id="ws-id",
+            lakehouse_id="lh-id",
         )
         mock_default.assert_not_called()
 
@@ -126,7 +112,7 @@ class TestLakehouseDispatch:
 
         mock_default.assert_called_once_with(
             lakehouse="Sales_LH",
-            workspace_id=None,
+            workspace_id="ws-id",
             workspace_name="MyWorkspace",
         )
         assert result["id"].tolist() == [9]

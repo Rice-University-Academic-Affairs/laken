@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import os
+
 from laken.frames import from_spark, to_spark
 from laken.logger import logger
 from laken.spark_runtime import get_or_create_spark_session
 from laken.table_names import (
-    format_fabric_table_name,
+    TableRef,
     format_table_name,
     is_four_part_table_name,
-    parse_table_name,
     resolve_spark_table_name,
+    resolve_table_ref,
 )
 from laken.types import DataFrameTypeName, InputFrame, OutputFrame, WriteMode
 
@@ -19,6 +21,7 @@ class FabricLakehouse:
         lakehouse: str | None = None,
         workspace_id: str | None = None,
         workspace_name: str | None = None,
+        lakehouse_id: str | None = None,
     ):
         nu = self._notebookutils()
         ctx = nu.runtime.context
@@ -26,6 +29,7 @@ class FabricLakehouse:
         self._lakehouse = lakehouse or ctx.get("defaultLakehouseName")
         self._workspace_id = workspace_id or ctx.get("currentWorkspaceId")
         self._workspace_name = workspace_name or ctx.get("currentWorkspaceName")
+        self._lakehouse_id = lakehouse_id or os.getenv("FABRIC_LAKEHOUSE_ID")
         logger.debug(
             "FabricLakehouse ready (lakehouse=%s, workspace=%s)",
             self._lakehouse,
@@ -40,6 +44,7 @@ class FabricLakehouse:
         max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
     ) -> OutputFrame:
+        _ = max_mirror_mb, max_sample_rows
         resolved = self._resolve_table_name(name)
         logger.debug("Reading %s from Fabric table %s", name, resolved)
         spark = self._spark()
@@ -98,12 +103,12 @@ class FabricLakehouse:
         spark = self._spark()
         spark.catalog.dropTable(self._resolve_table_name(name), ignoreIfNotExists=True)
 
-    def read_file(self, path: str, *, frame_type: DataFrameTypeName = "spark") -> OutputFrame:
+    def read_file(self, path: str) -> bytes:
         resolved_path = self._file_path(path)
         logger.debug("Reading Fabric file %s", resolved_path)
-        spark = self._spark()
-        spark_df = spark.read.parquet(resolved_path)
-        return from_spark(spark_df, frame_type)
+        nu = self._notebookutils()
+        with nu.fs.open(resolved_path, "rb") as handle:
+            return handle.read()
 
     def write_file(self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite") -> None:
         spark = self._spark()
@@ -117,6 +122,21 @@ class FabricLakehouse:
         nu = self._notebookutils()
         nu.fs.rm(self._file_path(path), recurse=False)
 
+    def _table_ref(self, name: str) -> TableRef:
+        ref = resolve_table_ref(
+            name,
+            workspace_name=self._workspace_name,
+            workspace_id=self._workspace_id,
+            lakehouse_name=self._lakehouse,
+            lakehouse_id=self._lakehouse_id,
+        )
+        return TableRef(
+            schema=ref.schema,
+            table=ref.table,
+            workspace=ref.workspace or self._workspace_name,
+            lakehouse=ref.lakehouse or self._lakehouse,
+        )
+
     def _resolve_table_name(self, name: str) -> str:
         stripped = name.strip()
         if not self._explicit_lakehouse:
@@ -124,8 +144,7 @@ class FabricLakehouse:
         self._require_cross_lakehouse_context()
         if is_four_part_table_name(stripped):
             return stripped
-        schema, table = parse_table_name(stripped)
-        return format_fabric_table_name(self._workspace_name, self._lakehouse, schema, table)
+        return self._table_ref(stripped).fabric_four_part()
 
     def _spark(self):
         return get_or_create_spark_session()
@@ -156,6 +175,8 @@ class FabricLakehouse:
         missing = []
         if not self._lakehouse:
             missing.append("lakehouse")
+        if not self._lakehouse_id:
+            missing.append("lakehouse_id")
         if not self._workspace_id:
             missing.append("workspace_id")
         if not self._workspace_name:
@@ -166,8 +187,7 @@ class FabricLakehouse:
     def _abfss_root(self) -> str:
         self._require_cross_lakehouse_context()
         return (
-            f"abfss://{self._workspace_name}@onelake.dfs.fabric.microsoft.com/"
-            f"{self._lakehouse}.Lakehouse/"
+            f"abfss://{self._workspace_id}@onelake.dfs.fabric.microsoft.com/{self._lakehouse_id}/"
         )
 
 

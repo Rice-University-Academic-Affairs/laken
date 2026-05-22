@@ -188,16 +188,19 @@ lh.drop_table("marketing.products")
 
 ```python
 lh.write_file(df, "exports/summary.parquet")
-lh.read_file("exports/summary.parquet", frame_type="pandas")
+raw = lh.read_file("exports/summary.parquet")
 lh.file_exists("exports/summary.parquet")
 lh.delete_file("exports/summary.parquet")
 ```
 
-**Warehouse tables** — Spark `synapsesql` in Fabric; local parquet stand-in for tests.
+**Warehouse tables** — Spark `synapsesql` in Fabric notebooks only.
 
 ```python
 lh.load_table_from_warehouse("SalesOrderHeader", "SalesWarehouse", frame_type="pandas")
 ```
+
+`read_file` returns raw bytes (from local cache or OneLake). Parse into pandas, polars, or Spark
+outside `Lakehouse` if you need a dataframe.
 
 **Other lakehouses** — defaults come from notebook context in Fabric; override locally
 or in notebooks:

@@ -195,17 +195,18 @@ class TestFabricDefaultLakehouse:
         lh.drop_table("products")
         mock_spark.catalog.dropTable.assert_called_with("products", ignoreIfNotExists=True)
 
-    @patch("laken.fabric_lakehouse.get_or_create_spark_session")
-    @patch("laken.fabric_lakehouse.from_spark", return_value="df")
     @patch("laken.fabric_lakehouse.FabricLakehouse._notebookutils")
-    def test_read_file_relative_path(
-        self, mock_nu_fn, _from_spark, mock_spark_fn, mock_spark, mock_notebookutils
-    ):
+    def test_read_file_relative_path(self, mock_nu_fn, mock_notebookutils):
         mock_nu_fn.return_value = mock_notebookutils
-        mock_spark_fn.return_value = mock_spark
+        mock_handle = MagicMock()
+        mock_handle.read.return_value = b"file-bytes"
+        mock_notebookutils.fs.open.return_value.__enter__.return_value = mock_handle
         lh = FabricLakehouse()
-        lh.read_file("data/sample.parquet")
-        mock_spark.read.parquet.assert_called_with("Files/data/sample.parquet")
+        assert lh.read_file("data/sample.parquet") == b"file-bytes"
+        mock_notebookutils.fs.open.assert_called_once_with(
+            "Files/data/sample.parquet",
+            "rb",
+        )
 
     @patch("laken.fabric_lakehouse.get_or_create_spark_session")
     @patch("laken.fabric_lakehouse.to_spark")
@@ -249,6 +250,7 @@ class TestFabricCrossLakehouse:
             lakehouse="Sales_LH",
             workspace_id="ws-id-123",
             workspace_name="MyWorkspace",
+            lakehouse_id="lh-id-456",
         )
         assert lh._resolve_table_name("marketing.products") == (
             "MyWorkspace.Sales_LH.marketing.products"
@@ -263,6 +265,7 @@ class TestFabricCrossLakehouse:
             lakehouse="Sales_LH",
             workspace_id="ws-id-123",
             workspace_name="MyWorkspace",
+            lakehouse_id="lh-id-456",
         )
         name = "MyWorkspace.Sales_LH.marketing.products"
         assert lh._resolve_table_name(name) == name
@@ -274,20 +277,23 @@ class TestFabricCrossLakehouse:
             lakehouse="Sales_LH",
             workspace_id="ws-id-123",
             workspace_name="MyWorkspace",
+            lakehouse_id="lh-id-456",
         )
         assert lh._file_path("data/sample.parquet") == (
-            "abfss://MyWorkspace@onelake.dfs.fabric.microsoft.com/"
-            "Sales_LH.Lakehouse/Files/data/sample.parquet"
+            "abfss://ws-id-123@onelake.dfs.fabric.microsoft.com/lh-id-456/Files/data/sample.parquet"
         )
 
     @patch("laken.fabric_lakehouse.FabricLakehouse._notebookutils")
-    def test_cross_lakehouse_requires_workspace_name(self, mock_nu_fn, mock_notebookutils):
+    def test_cross_lakehouse_requires_workspace_and_lakehouse_ids(
+        self, mock_nu_fn, mock_notebookutils
+    ):
         mock_nu_fn.return_value = mock_notebookutils
         lh = FabricLakehouse(
             lakehouse="Sales_LH",
             workspace_id="ws-id-123",
-            workspace_name=None,
+            workspace_name="MyWorkspace",
+            lakehouse_id=None,
         )
-        lh._workspace_name = None
-        with pytest.raises(ValueError):
+        lh._lakehouse_id = None
+        with pytest.raises(ValueError, match="lakehouse_id"):
             lh._resolve_table_name("products")

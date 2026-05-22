@@ -21,6 +21,7 @@ class Lakehouse:
         *,
         root: str | os.PathLike = ".laken/workspace",
         lakehouse: str | None = None,
+        lakehouse_id: str | None = None,
         workspace_id: str | None = None,
         workspace_name: str | None = None,
         metadata_path: str | os.PathLike | None = None,
@@ -34,6 +35,7 @@ class Lakehouse:
 
             self._implementation: LakehouseProtocol = FabricLakehouse(
                 lakehouse=lakehouse,
+                lakehouse_id=lakehouse_id,
                 workspace_id=workspace_id,
                 workspace_name=workspace_name,
             )
@@ -45,6 +47,7 @@ class Lakehouse:
             self._implementation = LocalLakehouse(
                 root=root,
                 lakehouse=lakehouse,
+                lakehouse_id=lakehouse_id,
                 workspace_id=workspace_id,
                 workspace_name=workspace_name,
                 metadata_path=metadata_path,
@@ -163,18 +166,8 @@ class Lakehouse:
     def drop_table(self, name: str) -> None:
         self._implementation.drop_table(name)
 
-    @overload
-    def read_file(self, path: str, *, frame_type: Literal["pandas"] = "pandas") -> pd.DataFrame: ...
-
-    @overload
-    def read_file(self, path: str, *, frame_type: Literal["spark"]) -> SparkDataFrame: ...
-
-    @overload
-    def read_file(self, path: str, *, frame_type: Literal["polars"]) -> pl.DataFrame: ...
-
-    def read_file(self, path: str, *, frame_type: DataFrameTypeName | None = None) -> OutputFrame:
-        kind = _default_frame_type(self._implementation) if frame_type is None else frame_type
-        return self._implementation.read_file(path, frame_type=kind)
+    def read_file(self, path: str) -> bytes:
+        return self._implementation.read_file(path)
 
     def write_file(self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite") -> None:
         self._implementation.write_file(df, path, mode=mode)

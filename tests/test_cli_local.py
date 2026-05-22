@@ -83,11 +83,31 @@ def test_local_lakehouse_explicit_fetcher_skips_default(tmp_path):
 
 def test_refresh_command_hydrates_with_default_fetcher(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("FABRIC_WORKSPACE_NAME", "MyWorkspace")
+    monkeypatch.setenv("FABRIC_LAKEHOUSE_NAME", "Sales_LH")
+    monkeypatch.setenv("FABRIC_WORKSPACE_ID", "ws-id")
+    monkeypatch.setenv("FABRIC_LAKEHOUSE_ID", "lh-id")
     fetcher = FakeFabricFetcher()
-    fetcher.add("raw_faculty", pa.table({"id": [1]}), version=1, size_bytes=100)
-    lakehouse = LocalLakehouse(fabric_fetcher=fetcher)
+    fetcher.add(
+        "MyWorkspace.Sales_LH.dbo.raw_faculty",
+        pa.table({"id": [1]}),
+        version=1,
+        size_bytes=100,
+    )
+    lakehouse = LocalLakehouse(
+        fabric_fetcher=fetcher,
+        workspace_name="MyWorkspace",
+        workspace_id="ws-id",
+        lakehouse="Sales_LH",
+        lakehouse_id="lh-id",
+    )
     lakehouse.read_table("raw_faculty", frame_type="pandas")
-    fetcher.add("raw_faculty", pa.table({"id": [2]}), version=2, size_bytes=100)
+    fetcher.add(
+        "MyWorkspace.Sales_LH.dbo.raw_faculty",
+        pa.table({"id": [2]}),
+        version=2,
+        size_bytes=100,
+    )
 
     with patch("laken.local_lakehouse.default_fabric_fetcher", return_value=fetcher):
         result = runner.invoke(app, ["refresh", "raw_faculty"])
