@@ -102,6 +102,21 @@ def test_write_to_mirror_converts_to_local_and_reset_restores_fabric(tmp_path, c
     assert _metadata(root)["raw_faculty"]["source"]["delta_version"] == 2
 
 
+def test_status_includes_orphan_delta_without_metadata(tmp_path):
+    root = tmp_path / ".laken" / "workspace"
+    table_dir = root / "Tables" / "orphan_table"
+    table_dir.mkdir(parents=True)
+    (table_dir / "_delta_log").mkdir()
+    lakehouse = LocalLakehouse(root=root)
+
+    rows = {row["table"]: row for row in lakehouse.status()}
+
+    assert "orphan_table" in rows
+    assert rows["orphan_table"]["state"] == "local"
+    assert rows["orphan_table"]["notes"] == "no metadata record"
+    assert "dbo.orphan_table" in lakehouse.list_tables()
+
+
 def test_status_marks_stale_and_sample_tables(tmp_path):
     root = tmp_path / ".laken" / "workspace"
     fetcher = FakeFabricFetcher()

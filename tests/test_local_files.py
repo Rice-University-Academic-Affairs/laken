@@ -82,6 +82,12 @@ class TestLocalFiles:
         result = pacsv.read_csv(pa.BufferReader(data)).to_pandas()
         assert len(result) == 2
 
+    def test_append_bytes_after_parquet_dataset_raises(self, lakehouse, sample_pandas):
+        lakehouse.write_file(sample_pandas, "data/sample.parquet")
+        lakehouse.write_file(sample_pandas, "data/sample.parquet", mode="append")
+        with pytest.raises(ValueError, match="storage"):
+            lakehouse.write_file(b"tail", "data/sample.parquet", mode="append")
+
     def test_read_hydrates_from_fabric_fetcher(self, tmp_path):
         root = tmp_path / "workspace"
         fetcher = FakeFabricFetcher()

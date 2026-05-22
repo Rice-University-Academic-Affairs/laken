@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock, patch
 
+import pyarrow as pa
 import pytest
 
 from laken import FabricLakehouse
@@ -205,6 +206,36 @@ class TestFabricDefaultLakehouse:
         assert lh.read_file("data/sample.parquet") == b"file-bytes"
         mock_notebookutils.fs.open.assert_called_once_with(
             "Files/data/sample.parquet",
+            "rb",
+        )
+
+    @patch("laken.fabric_lakehouse.to_arrow")
+    @patch("laken.fabric_lakehouse.FabricLakehouse._notebookutils")
+    def test_write_file_csv_writes_single_file(self, mock_nu_fn, mock_to_arrow, mock_notebookutils):
+        mock_nu_fn.return_value = mock_notebookutils
+        mock_to_arrow.return_value = pa.table({"id": [1], "value": ["a"]})
+        mock_handle = MagicMock()
+        mock_notebookutils.fs.open.return_value.__enter__.return_value = mock_handle
+        lh = FabricLakehouse()
+        lh.write_file(MagicMock(), "data/sample.csv")
+        mock_notebookutils.fs.open.assert_called_once_with("Files/data/sample.csv", "wb")
+        mock_handle.write.assert_called_once()
+        assert b"id" in mock_handle.write.call_args.args[0]
+
+    @patch("laken.fabric_lakehouse.FabricLakehouse._notebookutils")
+    def test_read_file_csv_reads_spark_part_file(self, mock_nu_fn, mock_notebookutils):
+        mock_nu_fn.return_value = mock_notebookutils
+        mock_notebookutils.fs.exists.return_value = True
+        entry = MagicMock()
+        entry.name = "part-00000-abc.csv"
+        mock_notebookutils.fs.ls.return_value = [entry]
+        mock_handle = MagicMock()
+        mock_handle.read.return_value = b"id,value\n1,a\n"
+        mock_notebookutils.fs.open.return_value.__enter__.return_value = mock_handle
+        lh = FabricLakehouse()
+        assert lh.read_file("data/sample.csv") == b"id,value\n1,a\n"
+        mock_notebookutils.fs.open.assert_called_once_with(
+            "Files/data/sample.csv/part-00000-abc.csv",
             "rb",
         )
 

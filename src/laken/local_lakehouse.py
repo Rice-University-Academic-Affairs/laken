@@ -176,17 +176,36 @@ class LocalLakehouse:
     def write_file(self, data: FileWrite, path: str, *, mode: WriteMode = "overwrite") -> None:
         file_path = self._file_path(path)
         if isinstance(data, bytes):
+            _ensure_storage_compatible(
+                file_path,
+                expected="file",
+                mode=mode,
+                suffix=file_path.suffix.lower(),
+            )
             _write_bytes(file_path, data, mode=mode)
             return
         suffix = file_path.suffix.lower()
         arrow_table = to_arrow(data)
         if suffix == ".parquet":
+            expected = "parquet_dataset" if mode == "append" else "file"
+            _ensure_storage_compatible(
+                file_path,
+                expected=expected,
+                mode=mode,
+                suffix=suffix,
+            )
             if mode == "overwrite":
                 _write_parquet_overwrite(file_path, arrow_table)
             else:
                 _write_parquet_append(file_path, arrow_table)
             return
         if suffix == ".csv":
+            _ensure_storage_compatible(
+                file_path,
+                expected="file",
+                mode=mode,
+                suffix=suffix,
+            )
             _write_csv(file_path, arrow_table, mode=mode)
             return
         raise ValueError(f"unsupported file extension for dataframe write: {suffix}")
@@ -241,20 +260,15 @@ class LocalLakehouse:
 
     def status(self) -> list[dict[str, str]]:
         rows: list[dict[str, str]] = []
+        seen: set[str] = set()
         for key, entry in sorted(self._metadata.tables().items()):
-            state = str(entry.get("state", "local"))
-            source = entry.get("source", {})
-            version = source.get("delta_version")
-            notes = self._status_notes(key, entry)
-            rows.append(
-                {
-                    "table": key,
-                    "state": state,
-                    "source_version": str(version) if version is not None else "-",
-                    "notes": notes,
-                }
-            )
-        return rows
+            seen.add(key)
+            rows.append(self._status_row(key, entry))
+        for key in self._metadata_keys_on_disk():
+            if key in seen:
+                continue
+            rows.append(self._status_row(key, self._inferred_metadata_entry(key)))
+        return sorted(rows, key=lambda row: row["table"])
 
     def _table_ref(self, name: str) -> TableRef:
         return resolve_table_ref(
@@ -482,7 +496,43 @@ class LocalLakehouse:
             return int(cache["sample_rows"])
         return self._max_sample_rows
 
+    def _status_row(self, key: str, entry: dict) -> dict[str, str]:
+        state = str(entry.get("state", "local"))
+        source = entry.get("source", {})
+        version = source.get("delta_version")
+        notes = self._status_notes(key, entry)
+        return {
+            "table": key,
+            "state": state,
+            "source_version": str(version) if version is not None else "-",
+            "notes": notes,
+        }
+
+    def _metadata_keys_on_disk(self) -> list[str]:
+        keys: list[str] = []
+        for name in self.list_tables():
+            keys.append(self._table_key(name))
+        return keys
+
+    def _inferred_metadata_entry(self, key: str) -> dict:
+        return {
+            "state": "local",
+            "path": display_path(self._table_dir_from_key(key)),
+            "inferred": True,
+        }
+
+    def _table_dir_from_key(self, key: str) -> Path:
+        if "." in key:
+            schema, table = key.split(".", 1)
+        else:
+            schema, table = "dbo", key
+        if schema == "dbo":
+            return self._root / "Tables" / table
+        return self._root / "Tables" / schema / table
+
     def _status_notes(self, key: str, entry: dict) -> str:
+        if entry.get("inferred"):
+            return "no metadata record"
         state = entry.get("state")
         if state == "local":
             return "local-only"
@@ -538,8 +588,39 @@ def _read_stored_file_bytes(file_path: Path) -> bytes:
     return file_path.read_bytes()
 
 
+def _file_storage_shape(file_path: Path) -> str | None:
+    if _parquet_dataset_dir(file_path).is_dir():
+        return "parquet_dataset"
+    if file_path.is_file():
+        return "file"
+    return None
+
+
+def _storage_shapes_compatible(existing: str, expected: str, *, suffix: str) -> bool:
+    if existing == expected:
+        return True
+    return suffix == ".parquet" and existing == "file" and expected == "parquet_dataset"
+
+
+def _ensure_storage_compatible(
+    file_path: Path,
+    *,
+    expected: str,
+    mode: WriteMode,
+    suffix: str,
+) -> None:
+    existing = _file_storage_shape(file_path)
+    if existing is None or mode == "overwrite":
+        return
+    if not _storage_shapes_compatible(existing, expected, suffix=suffix):
+        raise ValueError(
+            f"cannot {mode} {file_path.name}: existing storage is {existing}, expected {expected}"
+        )
+
+
 def _write_bytes(file_path: Path, data: bytes, *, mode: WriteMode) -> None:
-    shutil.rmtree(_parquet_dataset_dir(file_path), ignore_errors=True)
+    if mode == "overwrite":
+        shutil.rmtree(_parquet_dataset_dir(file_path), ignore_errors=True)
     file_path.parent.mkdir(parents=True, exist_ok=True)
     if mode == "append" and file_path.is_file():
         with file_path.open("ab") as handle:
@@ -549,7 +630,8 @@ def _write_bytes(file_path: Path, data: bytes, *, mode: WriteMode) -> None:
 
 
 def _write_csv(file_path: Path, arrow_table: pa.Table, *, mode: WriteMode) -> None:
-    shutil.rmtree(_parquet_dataset_dir(file_path), ignore_errors=True)
+    if mode == "overwrite":
+        shutil.rmtree(_parquet_dataset_dir(file_path), ignore_errors=True)
     file_path.parent.mkdir(parents=True, exist_ok=True)
     if mode == "append" and file_path.is_file():
         existing = pacsv.read_csv(file_path)
@@ -559,6 +641,8 @@ def _write_csv(file_path: Path, arrow_table: pa.Table, *, mode: WriteMode) -> No
 
 def _write_parquet_overwrite(file_path: Path, arrow_table: pa.Table) -> None:
     shutil.rmtree(_parquet_dataset_dir(file_path), ignore_errors=True)
+    if file_path.is_file():
+        file_path.unlink()
     file_path.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(arrow_table, file_path)
 

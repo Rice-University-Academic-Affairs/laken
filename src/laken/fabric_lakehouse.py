@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import os
+from io import BytesIO
 from pathlib import Path
 
-from laken.frames import from_spark, to_spark
+import pyarrow as pa
+import pyarrow.csv as pacsv
+
+from laken.frames import from_spark, to_arrow, to_spark
 from laken.logger import ensure_logging, logger
 from laken.spark_runtime import get_or_create_spark_session
 from laken.table_names import (
     TableRef,
     format_table_name,
     is_four_part_table_name,
-    resolve_spark_table_name,
     resolve_table_ref,
+    to_spark_table_name,
 )
 from laken.types import DataFrameTypeName, FileWrite, InputFrame, OutputFrame, WriteMode
 
@@ -109,8 +113,7 @@ class FabricLakehouse:
         resolved_path = self._file_path(path)
         logger.debug("Reading Fabric file %s", resolved_path)
         nu = self._notebookutils()
-        with nu.fs.open(resolved_path, "rb") as handle:
-            return handle.read()
+        return _read_fabric_file_bytes(nu, resolved_path, suffix=Path(path).suffix.lower())
 
     def write_file(self, data: FileWrite, path: str, *, mode: WriteMode = "overwrite") -> None:
         resolved_path = self._file_path(path)
@@ -121,23 +124,32 @@ class FabricLakehouse:
                 handle.write(data)
             return
         suffix = Path(path).suffix.lower()
+        if suffix == ".csv":
+            _write_fabric_csv(nu, resolved_path, to_arrow(data), mode=mode)
+            return
         spark = self._spark()
         spark_df = to_spark(data, spark)
         if suffix == ".parquet":
             spark_df.write.mode(mode).format("parquet").save(resolved_path)
             return
-        if suffix == ".csv":
-            spark_df.write.mode(mode).format("csv").option("header", True).save(resolved_path)
-            return
         raise ValueError(f"unsupported file extension for dataframe write: {suffix}")
 
     def file_exists(self, path: str) -> bool:
         nu = self._notebookutils()
-        return nu.fs.exists(self._file_path(path))
+        resolved_path = self._file_path(path)
+        if nu.fs.exists(resolved_path):
+            return True
+        suffix = Path(path).suffix.lower()
+        return _fabric_spark_part_path(nu, resolved_path, suffix=suffix) is not None
 
     def delete_file(self, path: str) -> None:
         nu = self._notebookutils()
-        nu.fs.rm(self._file_path(path), recurse=False)
+        resolved_path = self._file_path(path)
+        suffix = Path(path).suffix.lower()
+        if _fabric_spark_part_path(nu, resolved_path, suffix=suffix) is not None:
+            nu.fs.rm(resolved_path, recurse=True)
+            return
+        nu.fs.rm(resolved_path, recurse=False)
 
     def _table_ref(self, name: str) -> TableRef:
         ref = resolve_table_ref(
@@ -156,12 +168,12 @@ class FabricLakehouse:
 
     def _resolve_table_name(self, name: str) -> str:
         stripped = name.strip()
-        if not self._explicit_lakehouse:
-            return resolve_spark_table_name(stripped)
-        self._require_cross_lakehouse_context()
         if is_four_part_table_name(stripped):
             return stripped
-        return self._table_ref(stripped).fabric_four_part()
+        if self._explicit_lakehouse:
+            self._require_cross_lakehouse_context()
+        ref = self._table_ref(stripped)
+        return to_spark_table_name(ref, explicit_lakehouse=self._explicit_lakehouse)
 
     def _spark(self):
         return get_or_create_spark_session()
@@ -206,6 +218,66 @@ class FabricLakehouse:
         return (
             f"abfss://{self._workspace_id}@onelake.dfs.fabric.microsoft.com/{self._lakehouse_id}/"
         )
+
+
+def _fabric_entry_name(entry) -> str:
+    name = getattr(entry, "name", None)
+    if name:
+        return name
+    path = getattr(entry, "path", None)
+    if path:
+        return Path(str(path)).name
+    return str(entry)
+
+
+def _fabric_ls(nu, path: str) -> list:
+    return nu.fs.ls(path)
+
+
+def _fabric_spark_part_path(nu, resolved_path: str, *, suffix: str) -> str | None:
+    if not nu.fs.exists(resolved_path):
+        return None
+    try:
+        entries = _fabric_ls(nu, resolved_path)
+    except Exception:
+        return None
+    part_names = sorted(
+        name
+        for name in (_fabric_entry_name(entry) for entry in entries)
+        if name.startswith("part-") and name.endswith(suffix)
+    )
+    if not part_names:
+        return None
+    base = resolved_path.rstrip("/")
+    return f"{base}/{part_names[0]}"
+
+
+def _read_fabric_file_bytes(nu, resolved_path: str, *, suffix: str) -> bytes:
+    part_path = _fabric_spark_part_path(nu, resolved_path, suffix=suffix)
+    if part_path is not None:
+        with nu.fs.open(part_path, "rb") as handle:
+            return handle.read()
+    if not nu.fs.exists(resolved_path):
+        raise FileNotFoundError(f"file not found: {resolved_path}")
+    with nu.fs.open(resolved_path, "rb") as handle:
+        return handle.read()
+
+
+def _write_fabric_csv(
+    nu,
+    resolved_path: str,
+    arrow_table: pa.Table,
+    *,
+    mode: WriteMode,
+) -> None:
+    if mode == "append" and nu.fs.exists(resolved_path):
+        raw = _read_fabric_file_bytes(nu, resolved_path, suffix=".csv")
+        existing = pacsv.read_csv(BytesIO(raw))
+        arrow_table = pa.concat_tables([existing, arrow_table])
+    sink = pa.BufferOutputStream()
+    pacsv.write_csv(arrow_table, sink)
+    with nu.fs.open(resolved_path, "wb") as handle:
+        handle.write(sink.getvalue().to_pybytes())
 
 
 def _fabric_constants():
