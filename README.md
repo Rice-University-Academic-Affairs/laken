@@ -43,8 +43,8 @@ wheel before publishing to a Fabric environment.
 
 ## Quickstart
 
-Point laken at your Fabric lakehouse, read real tables on your laptop, and ship the same
-code back to Fabric.
+Summarize a Fabric table on your laptop, deploy that code as a package, and run it in a
+notebook — same function throughout.
 
 **1. Credentials** — create a `.env` in your project root (see
 [Environment variables](#environment-variables) for the full list):
@@ -59,46 +59,47 @@ FABRIC_WORKSPACE_ID=...
 FABRIC_LAKEHOUSE_ID=...
 ```
 
-**2. Read and write locally** — the first read pulls from OneLake into `.laken/`; later
-reads use the cache. Writes stay local until you run in Fabric:
+**2. Write and run your pipeline** — put the logic in your project (for example
+`src/myapp/pipeline.py`):
 
 ```python
 from laken import Lakehouse
 
-lh = Lakehouse()
-products = lh.read_table("marketing.products", frame_type="pandas")
 
-summary = products.groupby("category", as_index=False)["amount"].sum()
-lh.write_table(summary, "staging.product_summary")
+def summarize_products(lh: Lakehouse) -> None:
+    products = lh.read_table("marketing.products", frame_type="pandas")
+    summary = products.groupby("category", as_index=False)["amount"].sum()
+    lh.write_table(summary, "staging.product_summary")
 ```
 
-**3. Run in Fabric** — paste the same pipeline into a notebook; `Lakehouse()` attaches to
-your lakehouse and writes persist:
+On your laptop, `Lakehouse()` caches reads under `.laken/` and keeps writes local. In a
+Fabric notebook, the same call uses your attached lakehouse and writes persist:
 
 ```python
 from laken import Lakehouse
-from myapp.pipeline import run_pipeline
+from myapp.pipeline import summarize_products
 
 lh = Lakehouse()
-run_pipeline(lh)
+summarize_products(lh)
 ```
 
-**4. Deploy your package** — from the project root, with `FABRIC_ENVIRONMENT_ID` in
-`.env`:
+**3. Deploy your package** — add `FABRIC_ENVIRONMENT_ID` to `.env`, then from the project
+root (with `pyproject.toml` and `src/myapp/`):
 
 ```bash
 laken deploy
 ```
 
-**5. Cache on your machine** — see what landed locally and refresh when Fabric moves:
+**4. Run it in Fabric** — after the environment publish finishes, import your package in
+a notebook:
 
-```bash
-laken status
-laken refresh marketing.products
+```python
+from laken import Lakehouse
+from myapp.pipeline import summarize_products
+
+lh = Lakehouse()
+summarize_products(lh)
 ```
-
-Tables under 100 MB mirror in full; larger tables cache the first 10,000 rows. Details:
-[Local Fabric cache](#local-fabric-cache).
 
 ---
 
