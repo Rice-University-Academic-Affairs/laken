@@ -233,9 +233,8 @@ must have come from Fabric originally.
 ### Environment variables
 
 Root `.env` is loaded when you construct `Lakehouse` or `LocalLakehouse`, or run the
-`laken` CLI. Plain `import laken` does not load it. Shell and CI variables take precedence
-over `.env` values. Call `load_environment()` yourself only if you need env vars before
-creating a lakehouse instance.
+`laken` CLI. Shell and CI variables take precedence over `.env` values. Call
+`load_environment()` yourself only if you need env vars before creating a lakehouse instance.
 
 | Variable | Purpose |
 | :--- | :--- |
