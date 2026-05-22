@@ -17,7 +17,7 @@ class LakehouseProtocol(Protocol):
         name: str,
         *,
         as_: Literal["pandas"] = "pandas",
-        max_full_cache_bytes: int | None = None,
+        max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
     ) -> pd.DataFrame: ...
 
@@ -27,7 +27,7 @@ class LakehouseProtocol(Protocol):
         name: str,
         *,
         as_: Literal["spark"],
-        max_full_cache_bytes: int | None = None,
+        max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
     ) -> SparkDataFrame: ...
 
@@ -37,7 +37,7 @@ class LakehouseProtocol(Protocol):
         name: str,
         *,
         as_: Literal["polars"],
-        max_full_cache_bytes: int | None = None,
+        max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
     ) -> pl.DataFrame: ...
 
@@ -46,7 +46,7 @@ class LakehouseProtocol(Protocol):
         name: str,
         *,
         as_: DfKind | None = None,
-        max_full_cache_bytes: int | None = None,
+        max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
     ) -> OutputFrame: ...
 

@@ -105,7 +105,7 @@ class FabricLakehouse:
         name: str,
         *,
         as_: DfKind = "spark",
-        max_full_cache_bytes: int | None = None,
+        max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
     ) -> SparkDataFrame | pd.DataFrame | pl.DataFrame:
         spark = self._spark()

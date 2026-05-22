@@ -22,12 +22,13 @@ from laken.paths import (
 )
 from laken.types import DfKind, InputFrame, WriteMode
 from laken.workspace import (
+    DEFAULT_MAX_MIRROR_MB,
     DEFAULT_MAX_SAMPLE_ROWS,
-    MAX_FULL_CACHE_BYTES,
     FabricTableFetcher,
     FabricTableInfo,
     TableMetadataStore,
     display_path,
+    mirror_limit_bytes,
     utc_timestamp,
 )
 
@@ -50,7 +51,7 @@ class LocalLakehouse:
         workspace_name: str | None = None,
         metadata_path: str | os.PathLike | None = None,
         fabric_fetcher: FabricTableFetcher | None = None,
-        max_full_cache_bytes: int = MAX_FULL_CACHE_BYTES,
+        max_mirror_mb: int = DEFAULT_MAX_MIRROR_MB,
         max_sample_rows: int = DEFAULT_MAX_SAMPLE_ROWS,
     ):
         self._root = Path(root).resolve()
@@ -62,7 +63,7 @@ class LocalLakehouse:
             workspace_id=workspace_id,
             workspace_name=workspace_name,
         )
-        self._max_full_cache_bytes = max_full_cache_bytes
+        self._max_mirror_mb = max_mirror_mb
         self._max_sample_rows = max_sample_rows
         self._metadata = TableMetadataStore(
             metadata_path if metadata_path is not None else self._default_metadata_path()
@@ -114,14 +115,12 @@ class LocalLakehouse:
     def _resolve_cache_limits(
         self,
         *,
-        max_full_cache_bytes: int | None,
+        max_mirror_mb: int | None,
         max_sample_rows: int | None,
     ) -> tuple[int, int]:
-        resolved_bytes = (
-            max_full_cache_bytes if max_full_cache_bytes is not None else self._max_full_cache_bytes
-        )
+        resolved_mb = max_mirror_mb if max_mirror_mb is not None else self._max_mirror_mb
         resolved_rows = max_sample_rows if max_sample_rows is not None else self._max_sample_rows
-        return resolved_bytes, resolved_rows
+        return resolved_mb, resolved_rows
 
     def _cached_max_sample_rows(self, entry: dict) -> int:
         cache = entry.get("cache", {})
@@ -136,7 +135,7 @@ class LocalLakehouse:
         local_name: str,
         fetch_name: str,
         *,
-        max_full_cache_bytes: int,
+        max_mirror_mb: int,
         max_sample_rows: int,
     ) -> dict:
         if self._fabric_fetcher is None:
@@ -150,10 +149,11 @@ class LocalLakehouse:
         table_dir = self._table_dir(local_name)
         key = self._table_key(local_name)
         remote_size_bytes = info.size_bytes or 0
-        if remote_size_bytes > max_full_cache_bytes:
+        mirror_limit = mirror_limit_bytes(max_mirror_mb)
+        if remote_size_bytes > mirror_limit:
             print(
                 f"laken: {key} is {_format_bytes(remote_size_bytes)} on Fabric "
-                f"(over {_format_bytes(max_full_cache_bytes)} limit)."
+                f"(over {max_mirror_mb} MB limit)."
             )
             print(f"laken: caching a {max_sample_rows:,}-row development sample instead.")
             arrow_table = self._fabric_fetcher.fetch_table(fetch_name, max_rows=max_sample_rows)
@@ -204,17 +204,17 @@ class LocalLakehouse:
         self,
         name: str,
         *,
-        max_full_cache_bytes: int | None = None,
+        max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
     ) -> None:
-        cache_bytes, cache_rows = self._resolve_cache_limits(
-            max_full_cache_bytes=max_full_cache_bytes,
+        cache_mb, cache_rows = self._resolve_cache_limits(
+            max_mirror_mb=max_mirror_mb,
             max_sample_rows=max_sample_rows,
         )
         self._fetch_and_cache(
             name,
             self._resolve_fetch_name(name),
-            max_full_cache_bytes=cache_bytes,
+            max_mirror_mb=cache_mb,
             max_sample_rows=cache_rows,
         )
 
@@ -254,7 +254,7 @@ class LocalLakehouse:
         refreshed = self._fetch_and_cache(
             name,
             source.get("table", name),
-            max_full_cache_bytes=self._max_full_cache_bytes,
+            max_mirror_mb=self._max_mirror_mb,
             max_sample_rows=self._max_sample_rows,
         )
         version = refreshed.get("source", {}).get("delta_version")
@@ -269,7 +269,7 @@ class LocalLakehouse:
         reset = self._fetch_and_cache(
             name,
             source.get("table", name),
-            max_full_cache_bytes=self._max_full_cache_bytes,
+            max_mirror_mb=self._max_mirror_mb,
             max_sample_rows=self._max_sample_rows,
         )
         version = reset.get("source", {}).get("delta_version")
@@ -318,7 +318,7 @@ class LocalLakehouse:
         name: str,
         *,
         as_: Literal["pandas"] = "pandas",
-        max_full_cache_bytes: int | None = None,
+        max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
     ) -> pd.DataFrame: ...
 
@@ -328,7 +328,7 @@ class LocalLakehouse:
         name: str,
         *,
         as_: Literal["spark"],
-        max_full_cache_bytes: int | None = None,
+        max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
     ) -> SparkDataFrame: ...
 
@@ -338,7 +338,7 @@ class LocalLakehouse:
         name: str,
         *,
         as_: Literal["polars"],
-        max_full_cache_bytes: int | None = None,
+        max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
     ) -> pl.DataFrame: ...
 
@@ -347,14 +347,14 @@ class LocalLakehouse:
         name: str,
         *,
         as_: DfKind = "pandas",
-        max_full_cache_bytes: int | None = None,
+        max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
     ) -> SparkDataFrame | pd.DataFrame | pl.DataFrame:
         table_dir = self._table_dir(name)
         if not (table_dir / "_delta_log").is_dir():
             self._hydrate_table(
                 name,
-                max_full_cache_bytes=max_full_cache_bytes,
+                max_mirror_mb=max_mirror_mb,
                 max_sample_rows=max_sample_rows,
             )
         self._warn_about_cached_table(name)

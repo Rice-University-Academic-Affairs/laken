@@ -73,7 +73,7 @@ class TestLakehouseDispatch:
         implementation.read_table.assert_called_once_with(
             "products",
             as_="pandas",
-            max_full_cache_bytes=None,
+            max_mirror_mb=None,
             max_sample_rows=None,
         )
 
@@ -86,7 +86,7 @@ class TestLakehouseDispatch:
         implementation.read_table.assert_called_once_with(
             "products",
             as_="pandas",
-            max_full_cache_bytes=None,
+            max_mirror_mb=None,
             max_sample_rows=None,
         )
         implementation.write_table.assert_called_once()

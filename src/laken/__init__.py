@@ -10,13 +10,13 @@ def read_table(
     name: str,
     *,
     as_: DfKind | None = None,
-    max_full_cache_bytes: int | None = None,
+    max_mirror_mb: int | None = None,
     max_sample_rows: int | None = None,
 ) -> OutputFrame:
     return Lakehouse().read_table(
         name,
         as_=as_,
-        max_full_cache_bytes=max_full_cache_bytes,
+        max_mirror_mb=max_mirror_mb,
         max_sample_rows=max_sample_rows,
     )
 

@@ -281,8 +281,8 @@ cache up to **10,000 rows** as a development sample. Override on `Lakehouse` con
 per `read_table` call:
 
 ```python
-lh = Lakehouse(max_full_cache_bytes=200 * 1024 * 1024, max_sample_rows=5_000)
-lh.read_table("dbo.big_fact", max_full_cache_bytes=500 * 1024 * 1024)
+lh = Lakehouse(max_mirror_mb=200, max_sample_rows=5_000)
+lh.read_table("dbo.big_fact", max_mirror_mb=500)
 ```
 
 Per-read overrides apply only on the first hydrate; refresh and reset use the instance

@@ -35,9 +35,7 @@ def load_deploy_config(
     }
     missing = [name for name, value in values.items() if not value]
     if missing:
-        raise typer.BadParameter(
-            f"Missing required configuration: {', '.join(missing)}"
-        )
+        raise typer.BadParameter(f"Missing required configuration: {', '.join(missing)}")
     return DeployConfig(
         tenant_id=values["AZURE_TENANT_ID"],
         client_id=values["AZURE_CLIENT_ID"],

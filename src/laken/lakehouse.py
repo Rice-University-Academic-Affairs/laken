@@ -11,7 +11,7 @@ from laken.local import LocalLakehouse
 from laken.onelake_fetcher import default_fabric_fetcher
 from laken.protocol import LakehouseProtocol
 from laken.types import DfKind, InputFrame, OutputFrame, WriteMode
-from laken.workspace import DEFAULT_MAX_SAMPLE_ROWS, MAX_FULL_CACHE_BYTES, FabricTableFetcher
+from laken.workspace import DEFAULT_MAX_MIRROR_MB, DEFAULT_MAX_SAMPLE_ROWS, FabricTableFetcher
 
 
 def _is_fabric_context() -> bool:
@@ -47,7 +47,7 @@ class Lakehouse:
         workspace_name: str | None = None,
         metadata_path: str | os.PathLike | None = None,
         fabric_fetcher: FabricTableFetcher | None = None,
-        max_full_cache_bytes: int = MAX_FULL_CACHE_BYTES,
+        max_mirror_mb: int = DEFAULT_MAX_MIRROR_MB,
         max_sample_rows: int = DEFAULT_MAX_SAMPLE_ROWS,
     ):
         if _is_fabric_context():
@@ -71,7 +71,7 @@ class Lakehouse:
             workspace_name=workspace_name,
             metadata_path=metadata_path,
             fabric_fetcher=resolved_fetcher,
-            max_full_cache_bytes=max_full_cache_bytes,
+            max_mirror_mb=max_mirror_mb,
             max_sample_rows=max_sample_rows,
         )
 
@@ -81,7 +81,7 @@ class Lakehouse:
         name: str,
         *,
         as_: Literal["pandas"] = "pandas",
-        max_full_cache_bytes: int | None = None,
+        max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
     ) -> pd.DataFrame: ...
 
@@ -91,7 +91,7 @@ class Lakehouse:
         name: str,
         *,
         as_: Literal["spark"],
-        max_full_cache_bytes: int | None = None,
+        max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
     ) -> SparkDataFrame: ...
 
@@ -101,7 +101,7 @@ class Lakehouse:
         name: str,
         *,
         as_: Literal["polars"],
-        max_full_cache_bytes: int | None = None,
+        max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
     ) -> pl.DataFrame: ...
 
@@ -110,14 +110,14 @@ class Lakehouse:
         name: str,
         *,
         as_: DfKind | None = None,
-        max_full_cache_bytes: int | None = None,
+        max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
     ) -> OutputFrame:
         kind = _default_df_kind(self._implementation) if as_ is None else as_
         return self._implementation.read_table(
             name,
             as_=kind,
-            max_full_cache_bytes=max_full_cache_bytes,
+            max_mirror_mb=max_mirror_mb,
             max_sample_rows=max_sample_rows,
         )
 
