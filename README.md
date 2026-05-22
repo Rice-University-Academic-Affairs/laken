@@ -41,6 +41,73 @@ wheel before publishing to a Fabric environment.
 
 ---
 
+## Quickstart
+
+Write lakehouse code on your laptop against real Fabric data, package it, and run the
+same code in a notebook.
+
+**1. Credentials** — create a `.env` in your project root (see
+[Environment variables](#environment-variables) for the full list):
+
+```env
+AZURE_TENANT_ID=...
+AZURE_CLIENT_ID=...
+AZURE_CLIENT_SECRET=...
+FABRIC_WORKSPACE_NAME=MyWorkspace
+FABRIC_LAKEHOUSE_NAME=MyLakehouse
+FABRIC_WORKSPACE_ID=...
+FABRIC_LAKEHOUSE_ID=...
+```
+
+**2. Develop locally** — write your logic against real tables. On your laptop the first
+read pulls from Fabric into `.laken/`; in a notebook the same code runs against your
+attached lakehouse:
+
+```python
+from laken import Lakehouse
+
+lh = Lakehouse()
+df = lh.read_table("schema.table", frame_type="pandas")
+# ...
+lh.write_table(df, "schema.out_table")
+```
+
+**3. Package and deploy** — move that code into a normal Python package and publish it to
+a Fabric Environment (`FABRIC_ENVIRONMENT_ID` in `.env`):
+
+```
+myapp/
+├── pyproject.toml
+└── src/myapp/
+    └── pipeline.py
+```
+
+```python
+# src/myapp/pipeline.py
+from laken import Lakehouse
+
+def run(lh: Lakehouse) -> None:
+    df = lh.read_table("schema.table", frame_type="pandas")
+    # ...
+    lh.write_table(df, "schema.out_table")
+```
+
+```bash
+laken deploy
+```
+
+**4. Run in a notebook** — after the environment publish finishes:
+
+```python
+from laken import Lakehouse
+from myapp.pipeline import run
+
+lh = Lakehouse()
+run(lh)
+```
+
+---
+
 ## Develop against your Fabric lakehouse
 
 Set your credentials, select your workspace and lakehouse in a `.env` file at your
