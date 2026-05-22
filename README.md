@@ -52,7 +52,7 @@ wheel before publishing to a Fabric environment.
 Set your credentials, select your workspace and lakehouse in a `.env` file at your
 project root (or export them in your shell). `Lakehouse()` and the `laken` CLI load
 that file from the current working directory; variables already set in the environment
-are not overwritten. Importing `laken` alone does not load `.env`.
+are not overwritten.
 
 ```env
 AZURE_TENANT_ID=...
