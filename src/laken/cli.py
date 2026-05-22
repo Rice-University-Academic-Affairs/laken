@@ -55,6 +55,26 @@ def reset(table: str) -> None:
     _exit_on_error(run)
 
 
+def _exit_on_error(action) -> None:
+    try:
+        action()
+    except typer.BadParameter:
+        raise
+    except typer.Exit:
+        raise
+    except (
+        FileNotFoundError,
+        RuntimeError,
+        TimeoutError,
+        ValueError,
+        requests.RequestException,
+        KeyError,
+        json.JSONDecodeError,
+    ) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+
+
 def _print_status(rows: list[dict[str, str]]) -> None:
     headers = ["Table", "State", "Source version", "Notes"]
     values = [[row["table"], row["state"], row["source_version"], row["notes"]] for row in rows]
@@ -96,22 +116,3 @@ def _upload_project(
         f"environment {config.environment_id}"
     )
 
-
-def _exit_on_error(action) -> None:
-    try:
-        action()
-    except typer.BadParameter:
-        raise
-    except typer.Exit:
-        raise
-    except (
-        FileNotFoundError,
-        RuntimeError,
-        TimeoutError,
-        ValueError,
-        requests.RequestException,
-        KeyError,
-        json.JSONDecodeError,
-    ) as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(1) from exc
