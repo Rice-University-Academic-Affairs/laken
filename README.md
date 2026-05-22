@@ -1,6 +1,6 @@
 <div align="center">
 
-# laken
+![laken](docs/laken_splash.png)
 
 **The missing local development workflow for Microsoft Fabric.**
 
@@ -9,8 +9,6 @@
 [![Microsoft Fabric](https://img.shields.io/badge/Microsoft-Fabric-0078D4?logo=microsoft&logoColor=white)](https://www.microsoft.com/microsoft-fabric)
 
 </div>
-
-<br>
 
 **laken** lets you develop Python code for Fabric locally, using the tools you already trust.
 
