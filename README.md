@@ -59,8 +59,8 @@ FABRIC_WORKSPACE_ID=...
 FABRIC_LAKEHOUSE_ID=...
 ```
 
-**2. Develop locally** — write your logic against real tables. On your laptop the first
-read pulls from Fabric into `.laken/`; in a notebook the same code runs against your
+**2. Develop** — Reads pull from Fabric and cache locally. 
+In a Fabric notebook that same code runs against your
 attached lakehouse:
 
 ```python
@@ -96,7 +96,7 @@ def create_analytics(lh: Lakehouse) -> None:
 laken deploy
 ```
 
-**4. Run in a notebook** — after the environment publish finishes:
+**4. Run in a Fabric notebook** — after the publish finishes:
 
 ```python
 from laken import Lakehouse

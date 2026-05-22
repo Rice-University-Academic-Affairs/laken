@@ -1,6 +1,6 @@
 [project]
 name = "laken"
-version = "0.1.3"
+version = "0.1.4"
 description = "Local and Fabric lakehouse abstraction for modular, testable data code"
 readme = "README.md"
 authors = [
