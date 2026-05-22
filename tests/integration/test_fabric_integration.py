@@ -23,13 +23,15 @@ class TestFabricFetcher:
         info = fabric_fetcher.inspect_table(INTEGRATION_TABLE)
         assert info.delta_version >= 0
         assert INTEGRATION_TABLE in info.table
+        assert info.size_bytes is not None
+        assert info.size_bytes > 0
 
     def test_fetch_table_matches_spec(self, fabric_fetcher):
         table = fabric_fetcher.fetch_table(INTEGRATION_TABLE)
         assert_frame_matches_spec(from_arrow(table, "pandas"))
 
-    def test_fetch_table_with_limit(self, fabric_fetcher):
-        table = fabric_fetcher.fetch_table(INTEGRATION_TABLE, limit=3)
+    def test_fetch_table_with_max_rows(self, fabric_fetcher):
+        table = fabric_fetcher.fetch_table(INTEGRATION_TABLE, max_rows=3)
         assert table.num_rows == 3
 
     def test_fetch_csv_matches_spec(self, fabric_fetcher):
@@ -79,6 +81,7 @@ class TestFabricLakehouseRefresh:
         assert "refreshed" in capsys.readouterr().out
         entry = _metadata_tables(fabric_lakehouse._root)[INTEGRATION_TABLE]
         assert entry["state"] == "mirror"
+        assert entry["cache"]["remote_size_bytes"] > 0
 
     def test_status_reports_mirror(self, fabric_lakehouse):
         fabric_lakehouse.read_table(INTEGRATION_TABLE, as_="pandas")

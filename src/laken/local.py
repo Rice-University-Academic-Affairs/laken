@@ -22,7 +22,7 @@ from laken.paths import (
 )
 from laken.types import DfKind, InputFrame, WriteMode
 from laken.workspace import (
-    DEFAULT_SAMPLE_ROWS,
+    DEFAULT_MAX_SAMPLE_ROWS,
     MAX_FULL_CACHE_BYTES,
     FabricTableFetcher,
     FabricTableInfo,
@@ -30,6 +30,14 @@ from laken.workspace import (
     display_path,
     utc_timestamp,
 )
+
+
+def _format_bytes(size_bytes: int) -> str:
+    if size_bytes >= 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
+    if size_bytes >= 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    return f"{size_bytes} B"
 
 
 class LocalLakehouse:
@@ -43,7 +51,7 @@ class LocalLakehouse:
         metadata_path: str | os.PathLike | None = None,
         fabric_fetcher: FabricTableFetcher | None = None,
         max_full_cache_bytes: int = MAX_FULL_CACHE_BYTES,
-        sample_rows: int = DEFAULT_SAMPLE_ROWS,
+        max_sample_rows: int = DEFAULT_MAX_SAMPLE_ROWS,
     ):
         self._root = Path(root).resolve()
         self._lakehouse = lakehouse or os.getenv("FABRIC_LAKEHOUSE_NAME")
@@ -55,7 +63,7 @@ class LocalLakehouse:
             workspace_name=workspace_name,
         )
         self._max_full_cache_bytes = max_full_cache_bytes
-        self._sample_rows = sample_rows
+        self._max_sample_rows = max_sample_rows
         self._metadata = TableMetadataStore(
             metadata_path if metadata_path is not None else self._default_metadata_path()
         )
@@ -103,7 +111,34 @@ class LocalLakehouse:
             schema_mode="overwrite",
         )
 
-    def _fetch_and_cache(self, local_name: str, fetch_name: str) -> dict:
+    def _resolve_cache_limits(
+        self,
+        *,
+        max_full_cache_bytes: int | None,
+        max_sample_rows: int | None,
+    ) -> tuple[int, int]:
+        resolved_bytes = (
+            max_full_cache_bytes if max_full_cache_bytes is not None else self._max_full_cache_bytes
+        )
+        resolved_rows = max_sample_rows if max_sample_rows is not None else self._max_sample_rows
+        return resolved_bytes, resolved_rows
+
+    def _cached_max_sample_rows(self, entry: dict) -> int:
+        cache = entry.get("cache", {})
+        if "max_sample_rows" in cache:
+            return int(cache["max_sample_rows"])
+        if "sample_rows" in cache:
+            return int(cache["sample_rows"])
+        return self._max_sample_rows
+
+    def _fetch_and_cache(
+        self,
+        local_name: str,
+        fetch_name: str,
+        *,
+        max_full_cache_bytes: int,
+        max_sample_rows: int,
+    ) -> dict:
         if self._fabric_fetcher is None:
             raise FileNotFoundError(f"table not found: {local_name}")
         try:
@@ -114,11 +149,14 @@ class LocalLakehouse:
             raise FileNotFoundError(f"table not found: {local_name}") from err
         table_dir = self._table_dir(local_name)
         key = self._table_key(local_name)
-        size_bytes = info.size_bytes
-        if size_bytes is not None and size_bytes > self._max_full_cache_bytes:
-            print(f"laken: {key} is too large to cache in full.")
-            print(f"laken: cached a {self._sample_rows:,}-row development sample instead.")
-            arrow_table = self._fabric_fetcher.fetch_table(fetch_name, limit=self._sample_rows)
+        remote_size_bytes = info.size_bytes or 0
+        if remote_size_bytes > max_full_cache_bytes:
+            print(
+                f"laken: {key} is {_format_bytes(remote_size_bytes)} on Fabric "
+                f"(over {_format_bytes(max_full_cache_bytes)} limit)."
+            )
+            print(f"laken: caching a {max_sample_rows:,}-row development sample instead.")
+            arrow_table = self._fabric_fetcher.fetch_table(fetch_name, max_rows=max_sample_rows)
             self._write_delta_table(table_dir, arrow_table)
             entry = {
                 "state": "sample",
@@ -126,16 +164,16 @@ class LocalLakehouse:
                 "source": self._source_from_info(info),
                 "cache": {
                     "mode": "sample",
-                    "sample_rows": self._sample_rows,
+                    "remote_size_bytes": remote_size_bytes,
+                    "max_sample_rows": max_sample_rows,
                     "fetched_at": utc_timestamp(),
                 },
             }
             self._metadata.upsert(key, entry)
             return entry
         print(f"laken: fetching {key} from Fabric...")
-        arrow_table = self._fabric_fetcher.fetch_table(fetch_name, limit=None)
+        arrow_table = self._fabric_fetcher.fetch_table(fetch_name, max_rows=None)
         self._write_delta_table(table_dir, arrow_table)
-        row_count = info.row_count if info.row_count is not None else arrow_table.num_rows
         entry = {
             "state": "mirror",
             "path": display_path(table_dir),
@@ -143,8 +181,7 @@ class LocalLakehouse:
             "cache": {
                 "mode": "full",
                 "fetched_at": utc_timestamp(),
-                "row_count": row_count,
-                "size_bytes": size_bytes,
+                "remote_size_bytes": remote_size_bytes,
             },
         }
         self._metadata.upsert(key, entry)
@@ -163,8 +200,23 @@ class LocalLakehouse:
             return format_fabric_table_name(self._workspace_name, self._lakehouse, schema, table)
         return stripped
 
-    def _hydrate_table(self, name: str) -> None:
-        self._fetch_and_cache(name, self._resolve_fetch_name(name))
+    def _hydrate_table(
+        self,
+        name: str,
+        *,
+        max_full_cache_bytes: int | None = None,
+        max_sample_rows: int | None = None,
+    ) -> None:
+        cache_bytes, cache_rows = self._resolve_cache_limits(
+            max_full_cache_bytes=max_full_cache_bytes,
+            max_sample_rows=max_sample_rows,
+        )
+        self._fetch_and_cache(
+            name,
+            self._resolve_fetch_name(name),
+            max_full_cache_bytes=cache_bytes,
+            max_sample_rows=cache_rows,
+        )
 
     def _warn_about_cached_table(self, name: str) -> None:
         key = self._table_key(name)
@@ -172,7 +224,7 @@ class LocalLakehouse:
         if entry is None or entry.get("state") not in {"mirror", "sample"}:
             return
         if entry.get("state") == "sample":
-            sample_rows = entry.get("cache", {}).get("sample_rows", self._sample_rows)
+            sample_rows = self._cached_max_sample_rows(entry)
             print(f"laken: {key} is using a {sample_rows:,}-row development sample.")
         if self._fabric_fetcher is None:
             return
@@ -199,7 +251,12 @@ class LocalLakehouse:
         source = entry.get("source")
         if source is None:
             raise ValueError(f"table has no Fabric source: {key}")
-        refreshed = self._fetch_and_cache(name, source.get("table", name))
+        refreshed = self._fetch_and_cache(
+            name,
+            source.get("table", name),
+            max_full_cache_bytes=self._max_full_cache_bytes,
+            max_sample_rows=self._max_sample_rows,
+        )
         version = refreshed.get("source", {}).get("delta_version")
         print(f"laken: refreshed {key} from Fabric version {version}.")
 
@@ -209,7 +266,12 @@ class LocalLakehouse:
         if entry is None or entry.get("source") is None:
             raise ValueError(f"laken: {key} has no Fabric source to reset.")
         source = entry["source"]
-        reset = self._fetch_and_cache(name, source.get("table", name))
+        reset = self._fetch_and_cache(
+            name,
+            source.get("table", name),
+            max_full_cache_bytes=self._max_full_cache_bytes,
+            max_sample_rows=self._max_sample_rows,
+        )
         version = reset.get("source", {}).get("delta_version")
         print(f"laken: reset {key} to Fabric version {version}.")
 
@@ -236,7 +298,7 @@ class LocalLakehouse:
             return "local-only"
         notes = []
         if state == "sample":
-            sample_rows = entry.get("cache", {}).get("sample_rows", self._sample_rows)
+            sample_rows = self._cached_max_sample_rows(entry)
             notes.append(f"{sample_rows:,}-row sample")
         source = entry.get("source", {})
         cached_version = source.get("delta_version")
@@ -251,20 +313,50 @@ class LocalLakehouse:
         return ", ".join(notes)
 
     @overload
-    def read_table(self, name: str, *, as_: Literal["pandas"] = "pandas") -> pd.DataFrame: ...
+    def read_table(
+        self,
+        name: str,
+        *,
+        as_: Literal["pandas"] = "pandas",
+        max_full_cache_bytes: int | None = None,
+        max_sample_rows: int | None = None,
+    ) -> pd.DataFrame: ...
 
     @overload
-    def read_table(self, name: str, *, as_: Literal["spark"]) -> SparkDataFrame: ...
+    def read_table(
+        self,
+        name: str,
+        *,
+        as_: Literal["spark"],
+        max_full_cache_bytes: int | None = None,
+        max_sample_rows: int | None = None,
+    ) -> SparkDataFrame: ...
 
     @overload
-    def read_table(self, name: str, *, as_: Literal["polars"]) -> pl.DataFrame: ...
+    def read_table(
+        self,
+        name: str,
+        *,
+        as_: Literal["polars"],
+        max_full_cache_bytes: int | None = None,
+        max_sample_rows: int | None = None,
+    ) -> pl.DataFrame: ...
 
     def read_table(
-        self, name: str, *, as_: DfKind = "pandas"
+        self,
+        name: str,
+        *,
+        as_: DfKind = "pandas",
+        max_full_cache_bytes: int | None = None,
+        max_sample_rows: int | None = None,
     ) -> SparkDataFrame | pd.DataFrame | pl.DataFrame:
         table_dir = self._table_dir(name)
         if not (table_dir / "_delta_log").is_dir():
-            self._hydrate_table(name)
+            self._hydrate_table(
+                name,
+                max_full_cache_bytes=max_full_cache_bytes,
+                max_sample_rows=max_sample_rows,
+            )
         self._warn_about_cached_table(name)
         return from_arrow(DeltaTable(str(table_dir)).to_pyarrow_table(), as_)
 

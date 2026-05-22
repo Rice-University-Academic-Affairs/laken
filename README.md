@@ -275,9 +275,19 @@ Fabric environment with a compatible Python/Spark runtime.
 | `LocalLakehouse` | Laptop / CI | `.laken/workspace/` | Cached Delta and local tables | Local only; not pushed to Fabric |
 | `FabricLakehouse` | Fabric notebook | Attached lakehouse | Spark/Delta on attached lakehouse | Delta tables on attached lakehouse |
 
-First local read of a Fabric table fetches and caches Delta under `.laken/`. If Fabric
-changes, `laken` warns and keeps the cache until you run `laken refresh <table>`. Large
-tables may cache as a fixed-size sample.
+First local read of a Fabric table fetches and caches Delta under `.laken/`. Tables up to
+**100 MB** on Fabric (from the Delta transaction log) are mirrored in full; larger tables
+cache up to **10,000 rows** as a development sample. Override on `Lakehouse` construction or
+per `read_table` call:
+
+```python
+lh = Lakehouse(max_full_cache_bytes=200 * 1024 * 1024, max_sample_rows=5_000)
+lh.read_table("dbo.big_fact", max_full_cache_bytes=500 * 1024 * 1024)
+```
+
+Per-read overrides apply only on the first hydrate; refresh and reset use the instance
+defaults. If Fabric changes, `laken` warns and keeps the cache until you run
+`laken refresh <table>`.
 
 ---
 

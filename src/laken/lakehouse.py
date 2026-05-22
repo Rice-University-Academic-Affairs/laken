@@ -11,7 +11,7 @@ from laken.local import LocalLakehouse
 from laken.onelake_fetcher import default_fabric_fetcher
 from laken.protocol import LakehouseProtocol
 from laken.types import DfKind, InputFrame, OutputFrame, WriteMode
-from laken.workspace import DEFAULT_SAMPLE_ROWS, MAX_FULL_CACHE_BYTES, FabricTableFetcher
+from laken.workspace import DEFAULT_MAX_SAMPLE_ROWS, MAX_FULL_CACHE_BYTES, FabricTableFetcher
 
 
 def _is_fabric_context() -> bool:
@@ -48,7 +48,7 @@ class Lakehouse:
         metadata_path: str | os.PathLike | None = None,
         fabric_fetcher: FabricTableFetcher | None = None,
         max_full_cache_bytes: int = MAX_FULL_CACHE_BYTES,
-        sample_rows: int = DEFAULT_SAMPLE_ROWS,
+        max_sample_rows: int = DEFAULT_MAX_SAMPLE_ROWS,
     ):
         if _is_fabric_context():
             from laken.fabric import FabricLakehouse
@@ -72,21 +72,54 @@ class Lakehouse:
             metadata_path=metadata_path,
             fabric_fetcher=resolved_fetcher,
             max_full_cache_bytes=max_full_cache_bytes,
-            sample_rows=sample_rows,
+            max_sample_rows=max_sample_rows,
         )
 
     @overload
-    def read_table(self, name: str, *, as_: Literal["pandas"] = "pandas") -> pd.DataFrame: ...
+    def read_table(
+        self,
+        name: str,
+        *,
+        as_: Literal["pandas"] = "pandas",
+        max_full_cache_bytes: int | None = None,
+        max_sample_rows: int | None = None,
+    ) -> pd.DataFrame: ...
 
     @overload
-    def read_table(self, name: str, *, as_: Literal["spark"]) -> SparkDataFrame: ...
+    def read_table(
+        self,
+        name: str,
+        *,
+        as_: Literal["spark"],
+        max_full_cache_bytes: int | None = None,
+        max_sample_rows: int | None = None,
+    ) -> SparkDataFrame: ...
 
     @overload
-    def read_table(self, name: str, *, as_: Literal["polars"]) -> pl.DataFrame: ...
+    def read_table(
+        self,
+        name: str,
+        *,
+        as_: Literal["polars"],
+        max_full_cache_bytes: int | None = None,
+        max_sample_rows: int | None = None,
+    ) -> pl.DataFrame: ...
 
-    def read_table(self, name: str, *, as_: DfKind | None = None) -> OutputFrame:
+    def read_table(
+        self,
+        name: str,
+        *,
+        as_: DfKind | None = None,
+        max_full_cache_bytes: int | None = None,
+        max_sample_rows: int | None = None,
+    ) -> OutputFrame:
         kind = _default_df_kind(self._implementation) if as_ is None else as_
-        return self._implementation.read_table(name, as_=kind)
+        return self._implementation.read_table(
+            name,
+            as_=kind,
+            max_full_cache_bytes=max_full_cache_bytes,
+            max_sample_rows=max_sample_rows,
+        )
 
     @overload
     def load_table_from_warehouse(

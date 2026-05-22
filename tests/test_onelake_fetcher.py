@@ -127,12 +127,22 @@ def test_onelake_fetcher_uses_oauth_and_fabric_delta(mock_post, mock_delta, monk
     mock_post.return_value.json.return_value = {"access_token": "tok-123"}
     mock_dt = mock_delta.return_value
     mock_dt.version.return_value = 9
-    mock_dt.metadata.return_value = MagicMock()
+    mock_dt.get_add_actions.return_value = pa.table(
+        {
+            "path": ["part.parquet"],
+            "size_bytes": [1234],
+            "modification_time": [0],
+            "num_records": [2],
+        }
+    )
     mock_dt.to_pyarrow_table.return_value = pa.table({"id": [1, 2]})
+    mock_dataset = MagicMock()
+    mock_dataset.head.return_value = pa.table({"id": [1]})
+    mock_dt.to_pyarrow_dataset.return_value = mock_dataset
 
     fetcher = OneLakeFabricFetcher(workspace_name="MyWorkspace", lakehouse="Sales_LH")
     info = fetcher.inspect_table("marketing.products")
-    table = fetcher.fetch_table("marketing.products", limit=1)
+    table = fetcher.fetch_table("marketing.products", max_rows=1)
 
     token_call = mock_post.call_args
     assert token_call.args[0] == "https://login.microsoftonline.com/tenant-id/oauth2/v2.0/token"
@@ -146,7 +156,30 @@ def test_onelake_fetcher_uses_oauth_and_fabric_delta(mock_post, mock_delta, monk
     )
     assert info.table == "MyWorkspace.Sales_LH.marketing.products"
     assert info.delta_version == 9
+    assert info.size_bytes == 1234
     assert table.num_rows == 1
+    mock_dt.to_pyarrow_dataset.assert_called_once()
+    mock_dataset.head.assert_called_once_with(1)
+    mock_dt.to_pyarrow_table.assert_not_called()
+
+
+@patch("laken.onelake_fetcher.DeltaTable")
+@patch("laken.onelake_fetcher.requests.post")
+def test_onelake_fetcher_full_mirror_uses_to_pyarrow_table(mock_post, mock_delta, monkeypatch):
+    monkeypatch.setenv("AZURE_TENANT_ID", "tenant-id")
+    monkeypatch.setenv("AZURE_CLIENT_ID", "client-id")
+    monkeypatch.setenv("AZURE_CLIENT_SECRET", "client-secret")
+    mock_post.return_value.raise_for_status.return_value = None
+    mock_post.return_value.json.return_value = {"access_token": "tok"}
+    mock_dt = mock_delta.return_value
+    mock_dt.to_pyarrow_table.return_value = pa.table({"id": [1, 2, 3]})
+
+    fetcher = OneLakeFabricFetcher(workspace_name="WS", lakehouse="LH")
+    table = fetcher.fetch_table("products", max_rows=None)
+
+    assert table.num_rows == 3
+    mock_dt.to_pyarrow_table.assert_called_once()
+    mock_dt.to_pyarrow_dataset.assert_not_called()
 
 
 @patch("laken.onelake_fetcher.DeltaTable")
