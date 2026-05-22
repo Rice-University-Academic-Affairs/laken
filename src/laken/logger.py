@@ -4,10 +4,6 @@ import logging
 
 logger = logging.getLogger("laken")
 
-DEBUG = logging.DEBUG
-INFO = logging.INFO
-
-
 def ensure_logging() -> None:
     if logger.handlers:
         return
@@ -15,4 +11,4 @@ def ensure_logging() -> None:
     handler.setFormatter(logging.Formatter("laken: %(message)s"))
     logger.addHandler(handler)
     if logger.level == logging.NOTSET:
-        logger.setLevel(INFO)
+        logger.setLevel(logging.INFO)

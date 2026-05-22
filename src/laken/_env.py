@@ -1,5 +1,5 @@
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 
 def load_environment() -> None:
-    load_dotenv(override=False)
+    load_dotenv(find_dotenv(usecwd=True), override=False)

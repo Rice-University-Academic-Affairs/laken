@@ -5,6 +5,7 @@ import polars as pl
 import pytest
 
 from laken import LocalLakehouse
+from laken.onelake_fetcher import _token_cache
 
 _FABRIC_ENV_VARS = (
     "FABRIC_WORKSPACE_NAME",
@@ -24,6 +25,8 @@ def isolate_unit_test_fabric_env(request, monkeypatch):
         return
     for name in _FABRIC_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr("laken._env.load_dotenv", lambda *args, **kwargs: False)
+    _token_cache.clear()
 
 
 @pytest.fixture
