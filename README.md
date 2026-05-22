@@ -67,29 +67,29 @@ attached lakehouse:
 from laken import Lakehouse
 
 lh = Lakehouse()
-df = lh.read_table("schema.table", frame_type="pandas")
+df = lh.read_table("customers", frame_type="pandas")
 # ...
-lh.write_table(df, "schema.out_table")
+lh.write_table(df, "customer_analytics")
 ```
 
 **3. Package and deploy** — move that code into a normal Python package and publish it to
 a Fabric Environment (`FABRIC_ENVIRONMENT_ID` in `.env`):
 
 ```
-myapp/
+customer_analytics/
 ├── pyproject.toml
-└── src/myapp/
+└── src/customer_analytics/
     └── pipeline.py
 ```
 
 ```python
-# src/myapp/pipeline.py
+# src/customer_analytics/pipeline.py
 from laken import Lakehouse
 
-def run(lh: Lakehouse) -> None:
-    df = lh.read_table("schema.table", frame_type="pandas")
+def create_analytics(lh: Lakehouse) -> None:
+    df = lh.read_table("customers", frame_type="pandas")
     # ...
-    lh.write_table(df, "schema.out_table")
+    lh.write_table(df, "customer_analytics")
 ```
 
 ```bash
@@ -100,10 +100,10 @@ laken deploy
 
 ```python
 from laken import Lakehouse
-from myapp.pipeline import run
+from customer_analytics.pipeline import create_analytics
 
 lh = Lakehouse()
-run(lh)
+create_analytics(lh)
 ```
 
 ---
