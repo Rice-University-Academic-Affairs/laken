@@ -1,6 +1,6 @@
 import pytest
 
-from laken.paths import format_table_name, parse_table_name, resolve_spark_table_name
+from laken.table_names import format_table_name, parse_table_name, resolve_spark_table_name
 
 
 class TestParseTableName:

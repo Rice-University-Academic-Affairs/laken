@@ -1,23 +1,28 @@
 import json
+import logging
 import subprocess
 from pathlib import Path
 
 import requests
 import typer
 
+from laken._env import load_environment
 from laken.deploy.build import run_build
 from laken.deploy.config import load_deploy_config, require_project_root
 from laken.deploy.fabric_client import publish_wheel
 from laken.deploy.project import ProjectMetadata, read_project_metadata
 from laken.deploy.wheel import resolve_wheel
-from laken.local import LocalLakehouse
+from laken.local_lakehouse import LocalLakehouse
+
+load_environment()
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 
 
-@app.callback()
-def main() -> None:
-    pass
+def _configure_logging() -> None:
+    root = logging.getLogger("laken")
+    if not root.handlers:
+        logging.basicConfig(level=logging.INFO, format="laken: %(message)s")
 
 
 @app.command()
@@ -35,6 +40,7 @@ def deploy(
 @app.command()
 def status() -> None:
     def run() -> None:
+        _configure_logging()
         rows = LocalLakehouse().status()
         _print_status(rows)
 
@@ -44,6 +50,7 @@ def status() -> None:
 @app.command()
 def refresh(table: str) -> None:
     def run() -> None:
+        _configure_logging()
         LocalLakehouse().refresh_table(table)
 
     _exit_on_error(run)
@@ -52,6 +59,7 @@ def refresh(table: str) -> None:
 @app.command()
 def reset(table: str) -> None:
     def run() -> None:
+        _configure_logging()
         LocalLakehouse().reset_table(table)
 
     _exit_on_error(run)

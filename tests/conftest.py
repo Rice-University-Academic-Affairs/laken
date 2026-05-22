@@ -1,3 +1,5 @@
+import logging
+
 import pandas as pd
 import polars as pl
 import pytest
@@ -22,6 +24,12 @@ def isolate_unit_test_fabric_env(request, monkeypatch):
         return
     for name in _FABRIC_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture
+def capture_laken_logs(caplog):
+    caplog.set_level(logging.INFO, logger="laken")
+    return caplog
 
 
 @pytest.fixture

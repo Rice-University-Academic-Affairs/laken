@@ -1,26 +1,23 @@
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 from pathlib import Path
-from typing import Literal, overload
 
-import pandas as pd
-import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
 from deltalake import DeltaTable, write_deltalake
 
-from laken._spark import SparkDataFrame
 from laken.frames import from_arrow, to_arrow
 from laken.onelake_fetcher import default_fabric_fetcher
-from laken.paths import (
+from laken.table_names import (
     format_fabric_table_name,
     format_table_name,
     is_four_part_table_name,
     parse_table_name,
 )
-from laken.types import DfKind, InputFrame, WriteMode
+from laken.types import DfKind, InputFrame, OutputFrame, WriteMode
 from laken.workspace import (
     DEFAULT_MAX_MIRROR_MB,
     DEFAULT_MAX_SAMPLE_ROWS,
@@ -31,6 +28,8 @@ from laken.workspace import (
     mirror_limit_bytes,
     utc_timestamp,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _format_bytes(size_bytes: int) -> str:
@@ -58,11 +57,9 @@ class LocalLakehouse:
         self._lakehouse = lakehouse or os.getenv("FABRIC_LAKEHOUSE_NAME")
         self._workspace_id = workspace_id or os.getenv("FABRIC_WORKSPACE_ID")
         self._workspace_name = workspace_name or os.getenv("FABRIC_WORKSPACE_NAME")
-        self._fabric_fetcher = fabric_fetcher or default_fabric_fetcher(
-            lakehouse=lakehouse,
-            workspace_id=workspace_id,
-            workspace_name=workspace_name,
-        )
+        self._fabric_fetcher_arg = fabric_fetcher
+        self._fabric_fetcher_resolved = fabric_fetcher is not None
+        self._fabric_fetcher = fabric_fetcher
         self._max_mirror_mb = max_mirror_mb
         self._max_sample_rows = max_sample_rows
         self._metadata = TableMetadataStore(
@@ -70,6 +67,17 @@ class LocalLakehouse:
         )
         (self._root / "Files").mkdir(parents=True, exist_ok=True)
         (self._root / "Tables").mkdir(parents=True, exist_ok=True)
+
+    def _resolve_fabric_fetcher(self) -> FabricTableFetcher | None:
+        if self._fabric_fetcher_resolved:
+            return self._fabric_fetcher
+        self._fabric_fetcher = default_fabric_fetcher(
+            lakehouse=self._lakehouse,
+            workspace_id=self._workspace_id,
+            workspace_name=self._workspace_name,
+        )
+        self._fabric_fetcher_resolved = True
+        return self._fabric_fetcher
 
     def _default_metadata_path(self) -> Path:
         if self._root.name == "workspace":
@@ -138,10 +146,11 @@ class LocalLakehouse:
         max_mirror_mb: int,
         max_sample_rows: int,
     ) -> dict:
-        if self._fabric_fetcher is None:
+        fabric_fetcher = self._resolve_fabric_fetcher()
+        if fabric_fetcher is None:
             raise FileNotFoundError(f"table not found: {local_name}")
         try:
-            info = self._fabric_fetcher.inspect_table(fetch_name)
+            info = fabric_fetcher.inspect_table(fetch_name)
         except Exception as err:
             if type(err).__name__ != "TableNotFoundError":
                 raise
@@ -151,12 +160,14 @@ class LocalLakehouse:
         remote_size_bytes = info.size_bytes or 0
         mirror_limit = mirror_limit_bytes(max_mirror_mb)
         if remote_size_bytes > mirror_limit:
-            print(
-                f"laken: {key} is {_format_bytes(remote_size_bytes)} on Fabric "
-                f"(over {max_mirror_mb} MB limit)."
+            logger.info(
+                "%s is %s on Fabric (over %s MB limit).",
+                key,
+                _format_bytes(remote_size_bytes),
+                max_mirror_mb,
             )
-            print(f"laken: caching a {max_sample_rows:,}-row development sample instead.")
-            arrow_table = self._fabric_fetcher.fetch_table(fetch_name, max_rows=max_sample_rows)
+            logger.info("Caching a %s-row development sample instead.", f"{max_sample_rows:,}")
+            arrow_table = fabric_fetcher.fetch_table(fetch_name, max_rows=max_sample_rows)
             self._write_delta_table(table_dir, arrow_table)
             entry = {
                 "state": "sample",
@@ -171,8 +182,8 @@ class LocalLakehouse:
             }
             self._metadata.upsert(key, entry)
             return entry
-        print(f"laken: fetching {key} from Fabric...")
-        arrow_table = self._fabric_fetcher.fetch_table(fetch_name, max_rows=None)
+        logger.info("Fetching %s from Fabric...", key)
+        arrow_table = fabric_fetcher.fetch_table(fetch_name, max_rows=None)
         self._write_delta_table(table_dir, arrow_table)
         entry = {
             "state": "mirror",
@@ -185,7 +196,7 @@ class LocalLakehouse:
             },
         }
         self._metadata.upsert(key, entry)
-        print(f"laken: cached {key} locally as a Delta table.")
+        logger.info("Cached %s locally as a Delta table.", key)
         return entry
 
     def _can_resolve_fabric_name(self) -> bool:
@@ -225,20 +236,24 @@ class LocalLakehouse:
             return
         if entry.get("state") == "sample":
             sample_rows = self._cached_max_sample_rows(entry)
-            print(f"laken: {key} is using a {sample_rows:,}-row development sample.")
-        if self._fabric_fetcher is None:
+            logger.info("%s is using a %s-row development sample.", key, f"{sample_rows:,}")
+        fabric_fetcher = self._resolve_fabric_fetcher()
+        if fabric_fetcher is None:
             return
         source = entry.get("source", {})
         try:
-            current = self._fabric_fetcher.inspect_table(source.get("table", name))
+            current = fabric_fetcher.inspect_table(source.get("table", name))
         except Exception:
-            print(f"laken: could not check Fabric freshness. Using local cached {key}.")
+            logger.info("Could not check Fabric freshness. Using local cached %s.", key)
             return
         cached_version = source.get("delta_version")
         if cached_version is not None and current.delta_version != cached_version:
-            print(f"laken: {key} is cached from Fabric version {cached_version}.")
-            print(f"laken: Fabric is now at version {current.delta_version}.")
-            print(f"laken: using the local cached version. Run `laken refresh {key}` to update.")
+            logger.info("%s is cached from Fabric version %s.", key, cached_version)
+            logger.info("Fabric is now at version %s.", current.delta_version)
+            logger.info(
+                "Using the local cached version. Run `laken refresh %s` to update.",
+                key,
+            )
 
     def refresh_table(self, name: str) -> None:
         key = self._table_key(name)
@@ -246,7 +261,7 @@ class LocalLakehouse:
         if entry is None:
             raise FileNotFoundError(f"table not found: {name}")
         if entry.get("state") == "local":
-            print(f"laken: {key} is local-only and has no Fabric source to refresh.")
+            logger.info("%s is local-only and has no Fabric source to refresh.", key)
             return
         source = entry.get("source")
         if source is None:
@@ -258,7 +273,7 @@ class LocalLakehouse:
             max_sample_rows=self._max_sample_rows,
         )
         version = refreshed.get("source", {}).get("delta_version")
-        print(f"laken: refreshed {key} from Fabric version {version}.")
+        logger.info("Refreshed %s from Fabric version %s.", key, version)
 
     def reset_table(self, name: str) -> None:
         key = self._table_key(name)
@@ -273,7 +288,7 @@ class LocalLakehouse:
             max_sample_rows=self._max_sample_rows,
         )
         version = reset.get("source", {}).get("delta_version")
-        print(f"laken: reset {key} to Fabric version {version}.")
+        logger.info("Reset %s to Fabric version %s.", key, version)
 
     def status(self) -> list[dict[str, str]]:
         rows: list[dict[str, str]] = []
@@ -302,9 +317,10 @@ class LocalLakehouse:
             notes.append(f"{sample_rows:,}-row sample")
         source = entry.get("source", {})
         cached_version = source.get("delta_version")
-        if self._fabric_fetcher is not None and cached_version is not None:
+        fabric_fetcher = self._resolve_fabric_fetcher()
+        if fabric_fetcher is not None and cached_version is not None:
             try:
-                current = self._fabric_fetcher.inspect_table(source.get("table", key))
+                current = fabric_fetcher.inspect_table(source.get("table", key))
             except Exception:
                 notes.append("freshness unknown")
             else:
@@ -312,44 +328,14 @@ class LocalLakehouse:
                     notes.append(f"stale: Fabric is {current.delta_version}")
         return ", ".join(notes)
 
-    @overload
     def read_table(
         self,
         name: str,
         *,
-        as_: Literal["pandas"] = "pandas",
+        frame_type: DfKind = "pandas",
         max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
-    ) -> pd.DataFrame: ...
-
-    @overload
-    def read_table(
-        self,
-        name: str,
-        *,
-        as_: Literal["spark"],
-        max_mirror_mb: int | None = None,
-        max_sample_rows: int | None = None,
-    ) -> SparkDataFrame: ...
-
-    @overload
-    def read_table(
-        self,
-        name: str,
-        *,
-        as_: Literal["polars"],
-        max_mirror_mb: int | None = None,
-        max_sample_rows: int | None = None,
-    ) -> pl.DataFrame: ...
-
-    def read_table(
-        self,
-        name: str,
-        *,
-        as_: DfKind = "pandas",
-        max_mirror_mb: int | None = None,
-        max_sample_rows: int | None = None,
-    ) -> SparkDataFrame | pd.DataFrame | pl.DataFrame:
+    ) -> OutputFrame:
         table_dir = self._table_dir(name)
         if not (table_dir / "_delta_log").is_dir():
             self._hydrate_table(
@@ -358,40 +344,7 @@ class LocalLakehouse:
                 max_sample_rows=max_sample_rows,
             )
         self._warn_about_cached_table(name)
-        return from_arrow(DeltaTable(str(table_dir)).to_pyarrow_table(), as_)
-
-    @overload
-    def load_table_from_warehouse(
-        self,
-        table_name: str,
-        warehouse_name: str,
-        *,
-        schema: str | None = "dbo",
-        workspace_id: str | None = None,
-        as_: Literal["pandas"] = "pandas",
-    ) -> pd.DataFrame: ...
-
-    @overload
-    def load_table_from_warehouse(
-        self,
-        table_name: str,
-        warehouse_name: str,
-        *,
-        schema: str | None = "dbo",
-        workspace_id: str | None = None,
-        as_: Literal["spark"],
-    ) -> SparkDataFrame: ...
-
-    @overload
-    def load_table_from_warehouse(
-        self,
-        table_name: str,
-        warehouse_name: str,
-        *,
-        schema: str | None = "dbo",
-        workspace_id: str | None = None,
-        as_: Literal["polars"],
-    ) -> pl.DataFrame: ...
+        return from_arrow(DeltaTable(str(table_dir)).to_pyarrow_table(), frame_type)
 
     def load_table_from_warehouse(
         self,
@@ -400,9 +353,10 @@ class LocalLakehouse:
         *,
         schema: str | None = "dbo",
         workspace_id: str | None = None,
-        as_: DfKind = "pandas",
-    ) -> SparkDataFrame | pd.DataFrame | pl.DataFrame:
-        return self.read_file(table_name, as_=as_)
+        frame_type: DfKind = "pandas",
+    ) -> OutputFrame:
+        _ = warehouse_name, schema, workspace_id
+        return self.read_file(table_name, frame_type=frame_type)
 
     def write_table(self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite") -> None:
         table_dir = self._table_dir(name)
@@ -412,9 +366,9 @@ class LocalLakehouse:
         source = existing.get("source") if existing is not None else None
         created_at = existing.get("created_at") if existing is not None else None
         if existing is not None and existing.get("state") in {"mirror", "sample"}:
-            print(f"laken: {key} was a Fabric-backed mirror.")
-            print(
-                "laken: this write converts it to a local table. "
+            logger.info("%s was a Fabric-backed mirror.", key)
+            logger.info(
+                "This write converts it to a local table. "
                 "It will not be refreshed from Fabric unless reset."
             )
         if mode == "overwrite" or not (table_dir / "_delta_log").is_dir():
@@ -461,22 +415,11 @@ class LocalLakehouse:
         shutil.rmtree(self._table_dir(name), ignore_errors=True)
         self._metadata.remove(self._table_key(name))
 
-    @overload
-    def read_file(self, path: str, *, as_: Literal["pandas"] = "pandas") -> pd.DataFrame: ...
-
-    @overload
-    def read_file(self, path: str, *, as_: Literal["spark"]) -> SparkDataFrame: ...
-
-    @overload
-    def read_file(self, path: str, *, as_: Literal["polars"]) -> pl.DataFrame: ...
-
-    def read_file(
-        self, path: str, *, as_: DfKind = "pandas"
-    ) -> SparkDataFrame | pd.DataFrame | pl.DataFrame:
+    def read_file(self, path: str, *, frame_type: DfKind = "pandas") -> OutputFrame:
         file_path = self._file_path(path)
         if not file_path.is_file():
             raise FileNotFoundError(f"file not found: {path}")
-        return from_arrow(pq.read_table(file_path), as_)
+        return from_arrow(pq.read_table(file_path), frame_type)
 
     def write_file(self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite") -> None:
         file_path = self._file_path(path)

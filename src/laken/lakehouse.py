@@ -6,10 +6,9 @@ from typing import Literal, overload
 import pandas as pd
 import polars as pl
 
-from laken._spark import SparkDataFrame
-from laken.local import LocalLakehouse
-from laken.onelake_fetcher import default_fabric_fetcher
-from laken.protocol import LakehouseProtocol
+from laken.lakehouse_protocol import LakehouseProtocol
+from laken.local_lakehouse import LocalLakehouse
+from laken.spark_runtime import SparkDataFrame
 from laken.types import DfKind, InputFrame, OutputFrame, WriteMode
 from laken.workspace import DEFAULT_MAX_MIRROR_MB, DEFAULT_MAX_SAMPLE_ROWS, FabricTableFetcher
 
@@ -30,7 +29,7 @@ def _is_fabric_context() -> bool:
 
 
 def _default_df_kind(implementation: LakehouseProtocol) -> DfKind:
-    from laken.fabric import FabricLakehouse
+    from laken.fabric_lakehouse import FabricLakehouse
 
     if isinstance(implementation, FabricLakehouse):
         return "spark"
@@ -51,36 +50,31 @@ class Lakehouse:
         max_sample_rows: int = DEFAULT_MAX_SAMPLE_ROWS,
     ):
         if _is_fabric_context():
-            from laken.fabric import FabricLakehouse
+            from laken.fabric_lakehouse import FabricLakehouse
 
             self._implementation: LakehouseProtocol = FabricLakehouse(
                 lakehouse=lakehouse,
                 workspace_id=workspace_id,
                 workspace_name=workspace_name,
             )
-            return
-        resolved_fetcher = fabric_fetcher or default_fabric_fetcher(
-            lakehouse=lakehouse,
-            workspace_id=workspace_id,
-            workspace_name=workspace_name,
-        )
-        self._implementation = LocalLakehouse(
-            root=root,
-            lakehouse=lakehouse,
-            workspace_id=workspace_id,
-            workspace_name=workspace_name,
-            metadata_path=metadata_path,
-            fabric_fetcher=resolved_fetcher,
-            max_mirror_mb=max_mirror_mb,
-            max_sample_rows=max_sample_rows,
-        )
+        else:
+            self._implementation = LocalLakehouse(
+                root=root,
+                lakehouse=lakehouse,
+                workspace_id=workspace_id,
+                workspace_name=workspace_name,
+                metadata_path=metadata_path,
+                fabric_fetcher=fabric_fetcher,
+                max_mirror_mb=max_mirror_mb,
+                max_sample_rows=max_sample_rows,
+            )
 
     @overload
     def read_table(
         self,
         name: str,
         *,
-        as_: Literal["pandas"] = "pandas",
+        frame_type: Literal["pandas"] = "pandas",
         max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
     ) -> pd.DataFrame: ...
@@ -90,7 +84,7 @@ class Lakehouse:
         self,
         name: str,
         *,
-        as_: Literal["spark"],
+        frame_type: Literal["spark"],
         max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
     ) -> SparkDataFrame: ...
@@ -100,7 +94,7 @@ class Lakehouse:
         self,
         name: str,
         *,
-        as_: Literal["polars"],
+        frame_type: Literal["polars"],
         max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
     ) -> pl.DataFrame: ...
@@ -109,14 +103,14 @@ class Lakehouse:
         self,
         name: str,
         *,
-        as_: DfKind | None = None,
+        frame_type: DfKind | None = None,
         max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
     ) -> OutputFrame:
-        kind = _default_df_kind(self._implementation) if as_ is None else as_
+        kind = _default_df_kind(self._implementation) if frame_type is None else frame_type
         return self._implementation.read_table(
             name,
-            as_=kind,
+            frame_type=kind,
             max_mirror_mb=max_mirror_mb,
             max_sample_rows=max_sample_rows,
         )
@@ -129,7 +123,7 @@ class Lakehouse:
         *,
         schema: str | None = "dbo",
         workspace_id: str | None = None,
-        as_: Literal["pandas"] = "pandas",
+        frame_type: Literal["pandas"] = "pandas",
     ) -> pd.DataFrame: ...
 
     @overload
@@ -140,7 +134,7 @@ class Lakehouse:
         *,
         schema: str | None = "dbo",
         workspace_id: str | None = None,
-        as_: Literal["spark"],
+        frame_type: Literal["spark"],
     ) -> SparkDataFrame: ...
 
     @overload
@@ -151,7 +145,7 @@ class Lakehouse:
         *,
         schema: str | None = "dbo",
         workspace_id: str | None = None,
-        as_: Literal["polars"],
+        frame_type: Literal["polars"],
     ) -> pl.DataFrame: ...
 
     def load_table_from_warehouse(
@@ -161,15 +155,15 @@ class Lakehouse:
         *,
         schema: str | None = "dbo",
         workspace_id: str | None = None,
-        as_: DfKind | None = None,
+        frame_type: DfKind | None = None,
     ) -> OutputFrame:
-        kind = _default_df_kind(self._implementation) if as_ is None else as_
+        kind = _default_df_kind(self._implementation) if frame_type is None else frame_type
         return self._implementation.load_table_from_warehouse(
             table_name,
             warehouse_name,
             schema=schema,
             workspace_id=workspace_id,
-            as_=kind,
+            frame_type=kind,
         )
 
     def write_table(self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite") -> None:
@@ -184,36 +178,18 @@ class Lakehouse:
     def drop_table(self, name: str) -> None:
         self._implementation.drop_table(name)
 
-    def refresh_table(self, name: str) -> None:
-        refresh = getattr(self._implementation, "refresh_table", None)
-        if not callable(refresh):
-            raise RuntimeError("refresh_table is only available in local mode")
-        refresh(name)
-
-    def reset_table(self, name: str) -> None:
-        reset = getattr(self._implementation, "reset_table", None)
-        if not callable(reset):
-            raise RuntimeError("reset_table is only available in local mode")
-        reset(name)
-
-    def status(self) -> list[dict[str, str]]:
-        status = getattr(self._implementation, "status", None)
-        if not callable(status):
-            raise RuntimeError("status is only available in local mode")
-        return status()
+    @overload
+    def read_file(self, path: str, *, frame_type: Literal["pandas"] = "pandas") -> pd.DataFrame: ...
 
     @overload
-    def read_file(self, path: str, *, as_: Literal["pandas"] = "pandas") -> pd.DataFrame: ...
+    def read_file(self, path: str, *, frame_type: Literal["spark"]) -> SparkDataFrame: ...
 
     @overload
-    def read_file(self, path: str, *, as_: Literal["spark"]) -> SparkDataFrame: ...
+    def read_file(self, path: str, *, frame_type: Literal["polars"]) -> pl.DataFrame: ...
 
-    @overload
-    def read_file(self, path: str, *, as_: Literal["polars"]) -> pl.DataFrame: ...
-
-    def read_file(self, path: str, *, as_: DfKind | None = None) -> OutputFrame:
-        kind = _default_df_kind(self._implementation) if as_ is None else as_
-        return self._implementation.read_file(path, as_=kind)
+    def read_file(self, path: str, *, frame_type: DfKind | None = None) -> OutputFrame:
+        kind = _default_df_kind(self._implementation) if frame_type is None else frame_type
+        return self._implementation.read_file(path, frame_type=kind)
 
     def write_file(self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite") -> None:
         self._implementation.write_file(df, path, mode=mode)
@@ -225,4 +201,4 @@ class Lakehouse:
         return self._implementation.file_exists(path)
 
     def delete_file(self, path: str) -> None:
-        self._implementation.delete_file(path)
+        return self._implementation.delete_file(path)

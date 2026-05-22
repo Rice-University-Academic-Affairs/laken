@@ -1,20 +1,20 @@
 import pandas as pd
 import pytest
 
-from laken.frames import kind_of
+from laken.frames import dataframe_kind
 
 
 class TestLocalFiles:
     def test_write_then_read(self, lakehouse, sample_df, df_kind):
         lakehouse.write_file(sample_df, "data/sample.parquet")
-        result = lakehouse.read_file("data/sample.parquet", as_=df_kind)
-        assert kind_of(result) == df_kind
+        result = lakehouse.read_file("data/sample.parquet", frame_type=df_kind)
+        assert dataframe_kind(result) == df_kind
 
     def test_overwrite_replaces(self, lakehouse, sample_pandas):
         lakehouse.write_file(sample_pandas, "data/sample.parquet")
         replacement = pd.DataFrame({"id": [99], "value": ["z"]})
         lakehouse.write_file(replacement, "data/sample.parquet", mode="overwrite")
-        result = lakehouse.read_file("data/sample.parquet", as_="pandas")
+        result = lakehouse.read_file("data/sample.parquet", frame_type="pandas")
         assert len(result) == 1
         assert result.iloc[0]["id"] == 99
 
@@ -22,7 +22,7 @@ class TestLocalFiles:
         lakehouse.write_file(sample_pandas, "data/sample.parquet")
         extra = pd.DataFrame({"id": [3], "value": ["c"]})
         lakehouse.write_file(extra, "data/sample.parquet", mode="append")
-        result = lakehouse.read_file("data/sample.parquet", as_="pandas")
+        result = lakehouse.read_file("data/sample.parquet", frame_type="pandas")
         assert len(result) == 3
 
     def test_list_files_nested(self, lakehouse, sample_pandas):

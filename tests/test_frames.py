@@ -3,19 +3,19 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
-from laken.frames import from_arrow, kind_of, to_arrow
+from laken.frames import dataframe_kind, from_arrow, to_arrow
 
 
 class TestKindOf:
     def test_pandas(self, sample_pandas):
-        assert kind_of(sample_pandas) == "pandas"
+        assert dataframe_kind(sample_pandas) == "pandas"
 
     def test_polars(self, sample_polars):
-        assert kind_of(sample_polars) == "polars"
+        assert dataframe_kind(sample_polars) == "polars"
 
     def test_unknown_raises(self):
         with pytest.raises(TypeError):
-            kind_of([1, 2, 3])
+            dataframe_kind([1, 2, 3])
 
 
 class TestArrowRoundtrip:
@@ -24,7 +24,7 @@ class TestArrowRoundtrip:
         samples = {"pandas": sample_pandas, "polars": sample_polars}
         df = samples[kind]
         result = from_arrow(to_arrow(df), kind)
-        assert kind_of(result) == kind
+        assert dataframe_kind(result) == kind
         if kind == "pandas":
             assert len(result) == 2
         else:

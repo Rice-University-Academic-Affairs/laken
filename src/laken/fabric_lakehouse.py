@@ -1,20 +1,15 @@
 from __future__ import annotations
 
-from typing import Literal, overload
-
-import pandas as pd
-import polars as pl
-
-from laken._spark import SparkDataFrame, get_or_create_spark_session
 from laken.frames import from_spark, to_spark
-from laken.paths import (
+from laken.spark_runtime import get_or_create_spark_session
+from laken.table_names import (
     format_fabric_table_name,
     format_table_name,
     is_four_part_table_name,
     parse_table_name,
     resolve_spark_table_name,
 )
-from laken.types import DfKind, InputFrame, WriteMode
+from laken.types import DfKind, InputFrame, OutputFrame, WriteMode
 
 
 def _fabric_constants():
@@ -91,59 +86,17 @@ class FabricLakehouse:
             return f"Files/{normalized}" if normalized else "Files"
         return f"{self._abfss_root()}Files/{normalized}"
 
-    @overload
-    def read_table(self, name: str, *, as_: Literal["spark"] = "spark") -> SparkDataFrame: ...
-
-    @overload
-    def read_table(self, name: str, *, as_: Literal["pandas"]) -> pd.DataFrame: ...
-
-    @overload
-    def read_table(self, name: str, *, as_: Literal["polars"]) -> pl.DataFrame: ...
-
     def read_table(
         self,
         name: str,
         *,
-        as_: DfKind = "spark",
+        frame_type: DfKind = "spark",
         max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
-    ) -> SparkDataFrame | pd.DataFrame | pl.DataFrame:
+    ) -> OutputFrame:
         spark = self._spark()
         spark_df = spark.read.table(self._resolve_table_name(name))
-        return from_spark(spark_df, as_)
-
-    @overload
-    def load_table_from_warehouse(
-        self,
-        table_name: str,
-        warehouse_name: str,
-        *,
-        schema: str | None = "dbo",
-        workspace_id: str | None = None,
-        as_: Literal["spark"] = "spark",
-    ) -> SparkDataFrame: ...
-
-    @overload
-    def load_table_from_warehouse(
-        self,
-        table_name: str,
-        warehouse_name: str,
-        *,
-        schema: str | None = "dbo",
-        workspace_id: str | None = None,
-        as_: Literal["pandas"],
-    ) -> pd.DataFrame: ...
-
-    @overload
-    def load_table_from_warehouse(
-        self,
-        table_name: str,
-        warehouse_name: str,
-        *,
-        schema: str | None = "dbo",
-        workspace_id: str | None = None,
-        as_: Literal["polars"],
-    ) -> pl.DataFrame: ...
+        return from_spark(spark_df, frame_type)
 
     def load_table_from_warehouse(
         self,
@@ -152,8 +105,8 @@ class FabricLakehouse:
         *,
         schema: str | None = "dbo",
         workspace_id: str | None = None,
-        as_: DfKind = "spark",
-    ) -> SparkDataFrame | pd.DataFrame | pl.DataFrame:
+        frame_type: DfKind = "spark",
+    ) -> OutputFrame:
         constants = _fabric_constants()
         spark_df = (
             self._spark()
@@ -163,7 +116,7 @@ class FabricLakehouse:
             )
             .synapsesql(self._resolve_warehouse_table_name(table_name, warehouse_name, schema))
         )
-        return from_spark(spark_df, as_)
+        return from_spark(spark_df, frame_type)
 
     def write_table(self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite") -> None:
         spark = self._spark()
@@ -195,21 +148,10 @@ class FabricLakehouse:
         spark = self._spark()
         spark.catalog.dropTable(self._resolve_table_name(name), ignoreIfNotExists=True)
 
-    @overload
-    def read_file(self, path: str, *, as_: Literal["spark"] = "spark") -> SparkDataFrame: ...
-
-    @overload
-    def read_file(self, path: str, *, as_: Literal["pandas"]) -> pd.DataFrame: ...
-
-    @overload
-    def read_file(self, path: str, *, as_: Literal["polars"]) -> pl.DataFrame: ...
-
-    def read_file(
-        self, path: str, *, as_: DfKind = "spark"
-    ) -> SparkDataFrame | pd.DataFrame | pl.DataFrame:
+    def read_file(self, path: str, *, frame_type: DfKind = "spark") -> OutputFrame:
         spark = self._spark()
         spark_df = spark.read.parquet(self._file_path(path))
-        return from_spark(spark_df, as_)
+        return from_spark(spark_df, frame_type)
 
     def write_file(self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite") -> None:
         spark = self._spark()

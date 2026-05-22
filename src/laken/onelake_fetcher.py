@@ -7,7 +7,7 @@ import requests
 from deltalake import DeltaTable
 from deltalake.fs import DeltaStorageHandler
 
-from laken.paths import format_fabric_table_name, is_four_part_table_name, parse_table_name
+from laken.table_names import format_fabric_table_name, is_four_part_table_name, parse_table_name
 from laken.workspace import FabricTableInfo
 
 ONELAKE_SCOPE = "https://storage.azure.com/.default"
