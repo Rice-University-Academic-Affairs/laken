@@ -5,13 +5,16 @@ import shutil
 from pathlib import Path
 
 import pyarrow as pa
+import pyarrow.csv as pacsv
+import pyarrow.dataset as pads
 import pyarrow.parquet as pq
+import requests
 from deltalake import DeltaTable, write_deltalake
 from deltalake.exceptions import TableNotFoundError
 
 from laken._env import load_environment
 from laken.frames import from_arrow, to_arrow
-from laken.logger import logger
+from laken.logger import ensure_logging, logger
 from laken.onelake_fetcher import default_fabric_fetcher
 from laken.table_names import (
     TableRef,
@@ -19,7 +22,7 @@ from laken.table_names import (
     is_four_part_table_name,
     resolve_table_ref,
 )
-from laken.types import DataFrameTypeName, InputFrame, OutputFrame, WriteMode
+from laken.types import DataFrameTypeName, FileWrite, InputFrame, OutputFrame, WriteMode
 from laken.workspace import (
     DEFAULT_MAX_MIRROR_MB,
     DEFAULT_MAX_SAMPLE_ROWS,
@@ -47,6 +50,7 @@ class LocalLakehouse:
         max_sample_rows: int = DEFAULT_MAX_SAMPLE_ROWS,
     ):
         load_environment()
+        ensure_logging()
         self._root = Path(root).resolve()
         self._lakehouse = lakehouse or os.getenv("FABRIC_LAKEHOUSE_NAME")
         self._lakehouse_id = lakehouse_id or os.getenv("FABRIC_LAKEHOUSE_ID")
@@ -169,13 +173,23 @@ class LocalLakehouse:
         file_path.write_bytes(data)
         return data
 
-    def write_file(self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite") -> None:
+    def write_file(self, data: FileWrite, path: str, *, mode: WriteMode = "overwrite") -> None:
         file_path = self._file_path(path)
-        arrow_table = to_arrow(df)
-        if mode == "overwrite":
-            _write_parquet_overwrite(file_path, arrow_table)
+        if isinstance(data, bytes):
+            _write_bytes(file_path, data, mode=mode)
             return
-        _write_parquet_append(file_path, arrow_table)
+        suffix = file_path.suffix.lower()
+        arrow_table = to_arrow(data)
+        if suffix == ".parquet":
+            if mode == "overwrite":
+                _write_parquet_overwrite(file_path, arrow_table)
+            else:
+                _write_parquet_append(file_path, arrow_table)
+            return
+        if suffix == ".csv":
+            _write_csv(file_path, arrow_table, mode=mode)
+            return
+        raise ValueError(f"unsupported file extension for dataframe write: {suffix}")
 
     def file_exists(self, path: str) -> bool:
         file_path = self._file_path(path)
@@ -300,7 +314,7 @@ class LocalLakehouse:
         source = entry.get("source", {})
         try:
             current = fabric_fetcher.inspect_table(source.get("table", name))
-        except Exception:
+        except _FRESHNESS_CHECK_ERRORS:
             logger.info("Could not check Fabric freshness. Using local cached %s.", key)
             return
         cached_version = source.get("delta_version")
@@ -481,7 +495,7 @@ class LocalLakehouse:
         if fabric_fetcher is not None and cached_version is not None:
             try:
                 current = fabric_fetcher.inspect_table(source.get("table", key))
-            except Exception:
+            except _FRESHNESS_CHECK_ERRORS:
                 notes.append("freshness unknown")
             else:
                 if current.delta_version != cached_version:
@@ -500,6 +514,9 @@ class LocalLakehouse:
         return self._root / "Files" / normalized
 
 
+_FRESHNESS_CHECK_ERRORS = (TableNotFoundError, requests.RequestException, OSError)
+
+
 def _parquet_dataset_dir(file_path: Path) -> Path:
     return file_path.parent / f"{file_path.name}.d"
 
@@ -507,10 +524,36 @@ def _parquet_dataset_dir(file_path: Path) -> Path:
 def _read_stored_file_bytes(file_path: Path) -> bytes:
     dataset_dir = _parquet_dataset_dir(file_path)
     if dataset_dir.is_dir():
+        parts = sorted(dataset_dir.glob("part-*.parquet"))
+        if len(parts) == 1:
+            return parts[0].read_bytes()
+        dataset = pads.dataset(dataset_dir, format="parquet")
         sink = pa.BufferOutputStream()
-        pq.write_table(pq.read_table(dataset_dir), sink)
+        writer = pq.ParquetWriter(sink, dataset.schema)
+        for batch in dataset.to_batches():
+            writer.write_batch(batch)
+        writer.close()
         return sink.getvalue().to_pybytes()
     return file_path.read_bytes()
+
+
+def _write_bytes(file_path: Path, data: bytes, *, mode: WriteMode) -> None:
+    shutil.rmtree(_parquet_dataset_dir(file_path), ignore_errors=True)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    if mode == "append" and file_path.is_file():
+        with file_path.open("ab") as handle:
+            handle.write(data)
+        return
+    file_path.write_bytes(data)
+
+
+def _write_csv(file_path: Path, arrow_table: pa.Table, *, mode: WriteMode) -> None:
+    shutil.rmtree(_parquet_dataset_dir(file_path), ignore_errors=True)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    if mode == "append" and file_path.is_file():
+        existing = pacsv.read_csv(file_path)
+        arrow_table = pa.concat_tables([existing, arrow_table])
+    pacsv.write_csv(arrow_table, file_path)
 
 
 def _write_parquet_overwrite(file_path: Path, arrow_table: pa.Table) -> None:

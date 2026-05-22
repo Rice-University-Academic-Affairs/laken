@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 import pyarrow as pa
+import pyarrow.csv as pacsv
 import pyarrow.parquet as pq
 import pytest
 from fake_fabric_fetcher import FakeFabricFetcher
@@ -68,6 +69,18 @@ class TestLocalFiles:
     def test_invalid_path_raises(self, lakehouse, sample_pandas):
         with pytest.raises(ValueError):
             lakehouse.write_file(sample_pandas, "../escape.parquet")
+
+    def test_write_and_read_bytes(self, lakehouse):
+        lakehouse.write_file(b"hello", "data/notes.txt")
+        assert lakehouse.read_file("data/notes.txt") == b"hello"
+        lakehouse.write_file(b" world", "data/notes.txt", mode="append")
+        assert lakehouse.read_file("data/notes.txt") == b"hello world"
+
+    def test_write_csv_from_dataframe(self, lakehouse, sample_pandas):
+        lakehouse.write_file(sample_pandas, "data/sample.csv")
+        data = lakehouse.read_file("data/sample.csv")
+        result = pacsv.read_csv(pa.BufferReader(data)).to_pandas()
+        assert len(result) == 2
 
     def test_read_hydrates_from_fabric_fetcher(self, tmp_path):
         root = tmp_path / "workspace"

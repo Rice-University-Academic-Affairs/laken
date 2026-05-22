@@ -188,6 +188,7 @@ lh.drop_table("marketing.products")
 
 ```python
 lh.write_file(df, "exports/summary.parquet")
+lh.write_file(raw_bytes, "exports/notes.txt")
 raw = lh.read_file("exports/summary.parquet")
 lh.file_exists("exports/summary.parquet")
 lh.delete_file("exports/summary.parquet")

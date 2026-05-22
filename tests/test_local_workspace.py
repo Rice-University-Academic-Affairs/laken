@@ -3,6 +3,7 @@ import json
 import pandas as pd
 import pyarrow as pa
 import pytest
+import requests
 from fake_fabric_fetcher import FakeFabricFetcher
 
 from laken import LocalLakehouse
@@ -226,7 +227,7 @@ def test_read_warns_when_inspect_fails(tmp_path, capture_laken_logs):
     lakehouse = LocalLakehouse(root=root, fabric_fetcher=fetcher)
     lakehouse.read_table("raw_faculty", frame_type="pandas")
     capture_laken_logs.clear()
-    fetcher.inspect_errors["raw_faculty"] = RuntimeError("network down")
+    fetcher.inspect_errors["raw_faculty"] = requests.RequestException("network down")
 
     lakehouse.read_table("raw_faculty", frame_type="pandas")
 
@@ -239,7 +240,7 @@ def test_status_freshness_unknown_when_inspect_fails(tmp_path):
     fetcher.add("raw_faculty", pa.table({"id": [1]}), version=1, size_bytes=100)
     lakehouse = LocalLakehouse(root=root, fabric_fetcher=fetcher)
     lakehouse.read_table("raw_faculty", frame_type="pandas")
-    fetcher.inspect_errors["raw_faculty"] = RuntimeError("network down")
+    fetcher.inspect_errors["raw_faculty"] = requests.RequestException("network down")
 
     rows = {row["table"]: row for row in lakehouse.status()}
 

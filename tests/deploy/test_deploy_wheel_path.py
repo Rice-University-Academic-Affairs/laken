@@ -18,7 +18,6 @@ def test_deploy_uploads_wheel_from_build_not_dist_resolution(tmp_path, monkeypat
     monkeypatch.chdir(tmp_path)
     metadata = MagicMock()
     metadata.name = "laken"
-    metadata.wheel_version_pin.return_value = None
     uploaded: list[Path | None] = []
 
     def capture_upload(*_args, wheel_path=None, **_kwargs):

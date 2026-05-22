@@ -14,10 +14,8 @@ from laken.deploy.fabric_client import publish_wheel
 from laken.deploy.project import ProjectMetadata, read_project_metadata
 from laken.deploy.wheel import wheel_from_build
 from laken.local_lakehouse import LocalLakehouse
-from laken.logger import INFO, set_log_level
 
 load_environment()
-set_log_level(INFO)
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 

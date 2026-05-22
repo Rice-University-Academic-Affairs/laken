@@ -11,6 +11,8 @@ if TYPE_CHECKING:
 
     InputFrame = pd.DataFrame | pl.DataFrame | SparkDataFrame
     OutputFrame = pd.DataFrame | pl.DataFrame | SparkDataFrame
+    FileWrite = bytes | InputFrame
 else:
     InputFrame = pd.DataFrame | pl.DataFrame | object
     OutputFrame = pd.DataFrame | pl.DataFrame | object
+    FileWrite = bytes | object

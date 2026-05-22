@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from laken.frames import from_spark, to_spark
-from laken.logger import logger
+from laken.logger import ensure_logging, logger
 from laken.spark_runtime import get_or_create_spark_session
 from laken.table_names import (
     TableRef,
@@ -12,7 +13,7 @@ from laken.table_names import (
     resolve_spark_table_name,
     resolve_table_ref,
 )
-from laken.types import DataFrameTypeName, InputFrame, OutputFrame, WriteMode
+from laken.types import DataFrameTypeName, FileWrite, InputFrame, OutputFrame, WriteMode
 
 
 class FabricLakehouse:
@@ -23,6 +24,7 @@ class FabricLakehouse:
         workspace_name: str | None = None,
         lakehouse_id: str | None = None,
     ):
+        ensure_logging()
         nu = self._notebookutils()
         ctx = nu.runtime.context
         self._explicit_lakehouse = lakehouse is not None
@@ -110,9 +112,24 @@ class FabricLakehouse:
         with nu.fs.open(resolved_path, "rb") as handle:
             return handle.read()
 
-    def write_file(self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite") -> None:
+    def write_file(self, data: FileWrite, path: str, *, mode: WriteMode = "overwrite") -> None:
+        resolved_path = self._file_path(path)
+        nu = self._notebookutils()
+        if isinstance(data, bytes):
+            write_mode = "ab" if mode == "append" and nu.fs.exists(resolved_path) else "wb"
+            with nu.fs.open(resolved_path, write_mode) as handle:
+                handle.write(data)
+            return
+        suffix = Path(path).suffix.lower()
         spark = self._spark()
-        to_spark(df, spark).write.mode(mode).format("parquet").save(self._file_path(path))
+        spark_df = to_spark(data, spark)
+        if suffix == ".parquet":
+            spark_df.write.mode(mode).format("parquet").save(resolved_path)
+            return
+        if suffix == ".csv":
+            spark_df.write.mode(mode).format("csv").option("header", True).save(resolved_path)
+            return
+        raise ValueError(f"unsupported file extension for dataframe write: {suffix}")
 
     def file_exists(self, path: str) -> bool:
         nu = self._notebookutils()

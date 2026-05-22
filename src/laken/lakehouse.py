@@ -9,9 +9,9 @@ import polars as pl
 from laken._env import load_environment
 from laken.lakehouse_protocol import LakehouseProtocol
 from laken.local_lakehouse import LocalLakehouse
-from laken.logger import logger
+from laken.logger import ensure_logging, logger
 from laken.spark_runtime import SparkDataFrame
-from laken.types import DataFrameTypeName, InputFrame, OutputFrame, WriteMode
+from laken.types import DataFrameTypeName, FileWrite, InputFrame, OutputFrame, WriteMode
 from laken.workspace import DEFAULT_MAX_MIRROR_MB, DEFAULT_MAX_SAMPLE_ROWS, FabricTableFetcher
 
 
@@ -30,6 +30,7 @@ class Lakehouse:
         max_sample_rows: int = DEFAULT_MAX_SAMPLE_ROWS,
     ):
         load_environment()
+        ensure_logging()
         if _is_fabric_context():
             from laken.fabric_lakehouse import FabricLakehouse
 
@@ -169,8 +170,8 @@ class Lakehouse:
     def read_file(self, path: str) -> bytes:
         return self._implementation.read_file(path)
 
-    def write_file(self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite") -> None:
-        self._implementation.write_file(df, path, mode=mode)
+    def write_file(self, data: FileWrite, path: str, *, mode: WriteMode = "overwrite") -> None:
+        self._implementation.write_file(data, path, mode=mode)
 
     def file_exists(self, path: str) -> bool:
         return self._implementation.file_exists(path)
