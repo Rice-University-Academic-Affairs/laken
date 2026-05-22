@@ -109,11 +109,6 @@ class FabricLakehouse:
         spark = self._spark()
         to_spark(df, spark).write.mode(mode).format("parquet").save(self._file_path(path))
 
-    def list_files(self, path: str = "") -> list[str]:
-        nu = self._notebookutils()
-        entries = nu.fs.ls(self._file_path(path))
-        return [entry.name for entry in entries]
-
     def file_exists(self, path: str) -> bool:
         nu = self._notebookutils()
         return nu.fs.exists(self._file_path(path))

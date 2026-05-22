@@ -4,6 +4,8 @@ from pathlib import Path
 
 import requests
 import typer
+from packaging.utils import parse_wheel_filename
+from packaging.version import Version
 
 from laken._env import load_environment
 from laken.deploy.build import run_build
@@ -24,8 +26,8 @@ def deploy(
     environment_id: str | None = typer.Option(None, "--environment-id"),
 ) -> None:
     def run() -> None:
-        _build_project()
-        _upload_project(workspace_id, environment_id)
+        _, wheel_path = _build_project()
+        _upload_project(workspace_id, environment_id, wheel_path=wheel_path)
 
     _exit_on_error(run)
 
@@ -104,15 +106,22 @@ def _build_project() -> tuple[ProjectMetadata, Path]:
 def _upload_project(
     workspace_id: str | None = None,
     environment_id: str | None = None,
+    *,
+    wheel_path: Path | None = None,
 ) -> None:
     require_project_root()
     config = load_deploy_config(workspace_id, environment_id)
     metadata = read_project_metadata()
-    wheel_path, wheel_version = resolve_wheel(metadata.name, metadata.wheel_version_pin())
+    if wheel_path is None:
+        wheel_path, wheel_version = resolve_wheel(metadata.name, metadata.wheel_version_pin())
+    else:
+        _, parsed_version, _, _ = parse_wheel_filename(wheel_path.name)
+        wheel_version = (
+            parsed_version if isinstance(parsed_version, Version) else Version(str(parsed_version))
+        )
     typer.echo(f"Wheel found: {wheel_path}")
     publish_wheel(config=config, wheel_path=wheel_path)
     typer.echo(
         f"{metadata.name} {wheel_version} -> workspace {config.workspace_id} "
         f"environment {config.environment_id}"
     )
-

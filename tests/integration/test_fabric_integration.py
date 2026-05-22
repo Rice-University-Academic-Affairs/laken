@@ -178,12 +178,6 @@ class TestFabricLakehouseFiles:
         result = fabric_lakehouse.read_file("integration/append.parquet", frame_type="pandas")
         assert len(result) == 11
 
-    def test_list_files_nested(self, fabric_lakehouse, fabric_fetcher):
-        arrow = fabric_fetcher.fetch_file(INTEGRATION_CSV)
-        fabric_lakehouse.write_file(from_arrow(arrow, "pandas"), "nested/integration.parquet")
-        files = fabric_lakehouse.list_files("nested")
-        assert "nested/integration.parquet" in files
-
     def test_file_exists_and_delete(self, fabric_lakehouse, fabric_fetcher):
         arrow = fabric_fetcher.fetch_file(INTEGRATION_CSV)
         path = "integration/delete.parquet"

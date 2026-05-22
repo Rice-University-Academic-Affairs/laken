@@ -60,7 +60,8 @@ def test_publish_wheel_accepts_http_200_and_202(monkeypatch, tmp_path, capsys):
     output = capsys.readouterr().out
     assert "Wheel upload accepted (HTTP 200)." in output
     assert "Submitting Fabric Environment publish..." in output
-    assert "Publish request accepted (HTTP 202)." in output
+    assert "Publish submitted." in output
+    assert "Environment publish completes" in output
 
 
 def test_token_missing_access_token_raises(monkeypatch):

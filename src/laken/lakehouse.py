@@ -179,9 +179,6 @@ class Lakehouse:
     def write_file(self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite") -> None:
         self._implementation.write_file(df, path, mode=mode)
 
-    def list_files(self, path: str = "") -> list[str]:
-        return self._implementation.list_files(path)
-
     def file_exists(self, path: str) -> bool:
         return self._implementation.file_exists(path)
 
