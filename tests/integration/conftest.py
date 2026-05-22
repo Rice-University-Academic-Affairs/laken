@@ -2,6 +2,8 @@ import os
 
 import pandas as pd
 import polars as pl
+import pyarrow as pa
+import pyarrow.csv as pacsv
 import pytest
 
 from laken import LocalLakehouse
@@ -35,7 +37,7 @@ def _require_integration_fixtures(fetcher: OneLakeFabricFetcher) -> None:
         f"Integration table {INTEGRATION_TABLE!r} must exist in Fabric with "
         f"{expected} rows (got {table.num_rows})"
     )
-    csv_table = fetcher.fetch_file(INTEGRATION_CSV)
+    csv_table = pacsv.read_csv(pa.BufferReader(fetcher.fetch_file(INTEGRATION_CSV)))
     assert csv_table.num_rows == expected, (
         f"Integration file {INTEGRATION_CSV!r} must exist in Fabric with "
         f"{expected} rows (got {csv_table.num_rows})"
@@ -45,7 +47,12 @@ def _require_integration_fixtures(fetcher: OneLakeFabricFetcher) -> None:
 def fabric_credentials_configured() -> bool:
     if not _azure_credentials_available():
         return False
-    return bool(os.getenv("FABRIC_WORKSPACE_NAME") and os.getenv("FABRIC_LAKEHOUSE_NAME"))
+    return bool(
+        os.getenv("FABRIC_WORKSPACE_NAME")
+        and os.getenv("FABRIC_LAKEHOUSE_NAME")
+        and os.getenv("FABRIC_WORKSPACE_ID")
+        and os.getenv("FABRIC_LAKEHOUSE_ID")
+    )
 
 
 def assert_frame_matches_spec(frame) -> None:
@@ -88,7 +95,8 @@ def fabric_lakehouse(tmp_path, fabric_fetcher) -> LocalLakehouse:
         fabric_fetcher=fabric_fetcher,
         workspace_name=os.environ["FABRIC_WORKSPACE_NAME"],
         lakehouse=os.environ["FABRIC_LAKEHOUSE_NAME"],
-        workspace_id=os.getenv("FABRIC_WORKSPACE_ID"),
+        workspace_id=os.environ["FABRIC_WORKSPACE_ID"],
+        lakehouse_id=os.environ["FABRIC_LAKEHOUSE_ID"],
     )
 
 

@@ -5,20 +5,19 @@ from packaging.utils import InvalidWheelFilename, parse_wheel_filename
 from packaging.version import InvalidVersion, Version
 
 
-def resolve_wheel(project_name: str, project_version: str | None = None) -> tuple[Path, Version]:
+def wheel_from_build(project_name: str) -> tuple[Path, Version]:
     matches = _collect_matches(project_name)
-    target = Version(project_version) if project_version else max(v for v, _ in matches)
-    wheels = [path for v, path in matches if v == target]
-    if not wheels:
-        found = ", ".join(str(v) for v, _ in matches)
-        raise RuntimeError(
-            f"No wheel for {project_name!r} version {project_version!r} in dist/ "
-            f"(found: {found}); check the project version and run laken deploy"
-        )
-    if len(wheels) > 1:
-        names = ", ".join(wheel.name for wheel in wheels)
-        raise RuntimeError(f"Multiple wheels found for {project_name!r} {target}: {names}")
-    return wheels[0], target
+    if not matches:
+        raise FileNotFoundError(f"No wheel for project {project_name!r} found in dist/")
+    if len(matches) == 1:
+        version, path = matches[0]
+        return path, version
+    paths = [path for _, path in matches]
+    names = ", ".join(path.name for path in paths)
+    raise RuntimeError(
+        f"Multiple wheels for {project_name!r} in dist/ after build: {names}. "
+        "Run laken deploy again from a clean dist/."
+    )
 
 
 def _collect_matches(project_name: str) -> list[tuple[Version, Path]]:
@@ -36,8 +35,6 @@ def _collect_matches(project_name: str) -> list[tuple[Version, Path]]:
         if _normalize_name(distribution) == normalized_name:
             matches.append((version, wheel))
 
-    if not matches:
-        raise FileNotFoundError(f"No wheel for project {project_name!r} found in dist/")
     return matches
 
 

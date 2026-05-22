@@ -3,6 +3,7 @@ import json
 import pandas as pd
 import pyarrow as pa
 import pytest
+import requests
 from fake_fabric_fetcher import FakeFabricFetcher
 
 from laken import LocalLakehouse
@@ -99,6 +100,21 @@ def test_write_to_mirror_converts_to_local_and_reset_restores_fabric(tmp_path, c
     assert lakehouse.read_table("raw_faculty", frame_type="pandas")["id"].tolist() == [2]
     assert _metadata(root)["raw_faculty"]["state"] == "mirror"
     assert _metadata(root)["raw_faculty"]["source"]["delta_version"] == 2
+
+
+def test_status_includes_orphan_delta_without_metadata(tmp_path):
+    root = tmp_path / ".laken" / "workspace"
+    table_dir = root / "Tables" / "orphan_table"
+    table_dir.mkdir(parents=True)
+    (table_dir / "_delta_log").mkdir()
+    lakehouse = LocalLakehouse(root=root)
+
+    rows = {row["table"]: row for row in lakehouse.status()}
+
+    assert "orphan_table" in rows
+    assert rows["orphan_table"]["state"] == "local"
+    assert rows["orphan_table"]["notes"] == "no metadata record"
+    assert "dbo.orphan_table" in lakehouse.list_tables()
 
 
 def test_status_marks_stale_and_sample_tables(tmp_path):
@@ -204,6 +220,21 @@ def test_reset_without_fabric_source_raises(tmp_path):
         lakehouse.reset_table("local_only")
 
 
+def test_read_warns_when_credentials_missing_for_cached_mirror(tmp_path, capture_laken_logs):
+    root = tmp_path / ".laken" / "workspace"
+    fetcher = FakeFabricFetcher()
+    fetcher.add("raw_faculty", pa.table({"id": [1]}), version=1, size_bytes=100)
+    lakehouse = LocalLakehouse(root=root, fabric_fetcher=fetcher)
+    lakehouse.read_table("raw_faculty", frame_type="pandas")
+    capture_laken_logs.clear()
+    lakehouse._fabric_fetcher = None
+    lakehouse._fabric_fetcher_resolved = True
+
+    lakehouse.read_table("raw_faculty", frame_type="pandas")
+
+    assert "Credentials are not configured" in capture_laken_logs.text
+
+
 def test_read_warns_when_inspect_fails(tmp_path, capture_laken_logs):
     root = tmp_path / ".laken" / "workspace"
     fetcher = FakeFabricFetcher()
@@ -211,7 +242,7 @@ def test_read_warns_when_inspect_fails(tmp_path, capture_laken_logs):
     lakehouse = LocalLakehouse(root=root, fabric_fetcher=fetcher)
     lakehouse.read_table("raw_faculty", frame_type="pandas")
     capture_laken_logs.clear()
-    fetcher.inspect_errors["raw_faculty"] = RuntimeError("network down")
+    fetcher.inspect_errors["raw_faculty"] = requests.RequestException("network down")
 
     lakehouse.read_table("raw_faculty", frame_type="pandas")
 
@@ -224,7 +255,7 @@ def test_status_freshness_unknown_when_inspect_fails(tmp_path):
     fetcher.add("raw_faculty", pa.table({"id": [1]}), version=1, size_bytes=100)
     lakehouse = LocalLakehouse(root=root, fabric_fetcher=fetcher)
     lakehouse.read_table("raw_faculty", frame_type="pandas")
-    fetcher.inspect_errors["raw_faculty"] = RuntimeError("network down")
+    fetcher.inspect_errors["raw_faculty"] = requests.RequestException("network down")
 
     rows = {row["table"]: row for row in lakehouse.status()}
 
@@ -297,10 +328,6 @@ def test_read_without_fetcher_raises_file_not_found(tmp_path):
         lakehouse.read_table("missing", frame_type="pandas")
 
 
-class TableNotFoundError(Exception):
-    pass
-
-
 def test_write_delta_table_restores_backup_on_failure(tmp_path, monkeypatch):
     root = tmp_path / ".laken" / "workspace"
     fetcher = FakeFabricFetcher()
@@ -324,6 +351,8 @@ def test_write_delta_table_restores_backup_on_failure(tmp_path, monkeypatch):
 
 
 def test_hydrate_maps_table_not_found_to_file_not_found(tmp_path):
+    from deltalake.exceptions import TableNotFoundError
+
     root = tmp_path / ".laken" / "workspace"
     fetcher = FakeFabricFetcher(inspect_errors={"missing": TableNotFoundError("gone")})
     lakehouse = LocalLakehouse(root=root, fabric_fetcher=fetcher)
@@ -341,7 +370,9 @@ def test_refresh_uses_stored_four_part_source_table(tmp_path):
         root=root,
         fabric_fetcher=fetcher,
         workspace_name="MyWorkspace",
+        workspace_id="ws-id",
         lakehouse="Sales_LH",
+        lakehouse_id="lh-id",
     )
 
     lakehouse.read_table("marketing.products", frame_type="pandas")

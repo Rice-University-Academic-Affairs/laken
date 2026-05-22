@@ -29,6 +29,8 @@ class FabricTableFetcher(Protocol):
 
     def fetch_table(self, name: str, *, max_rows: int | None = None) -> pa.Table: ...
 
+    def fetch_file(self, path: str) -> bytes: ...
+
 
 class TableMetadataStore:
     def __init__(self, path: str | os.PathLike):

@@ -16,14 +16,9 @@ class TestLocalTables:
         result = lakehouse.read_table("marketing.products", frame_type=df_kind)
         assert dataframe_kind(result) == df_kind
 
-    def test_load_table_from_warehouse_reads_file(self, lakehouse, sample_df, df_kind):
-        lakehouse.write_file(sample_df, "warehouse/products.parquet")
-        result = lakehouse.load_table_from_warehouse(
-            "warehouse/products.parquet",
-            "SalesWarehouse",
-            frame_type=df_kind,
-        )
-        assert dataframe_kind(result) == df_kind
+    def test_load_table_from_warehouse_not_supported_locally(self, lakehouse):
+        with pytest.raises(NotImplementedError):
+            lakehouse.load_table_from_warehouse("orders", "SalesWarehouse")
 
     def test_overwrite_resets(self, lakehouse, sample_pandas):
         lakehouse.write_table(sample_pandas, "products")

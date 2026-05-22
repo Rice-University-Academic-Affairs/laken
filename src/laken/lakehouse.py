@@ -9,9 +9,9 @@ import polars as pl
 from laken._env import load_environment
 from laken.lakehouse_protocol import LakehouseProtocol
 from laken.local_lakehouse import LocalLakehouse
-from laken.logger import logger
+from laken.logger import ensure_logging, logger
 from laken.spark_runtime import SparkDataFrame
-from laken.types import DataFrameTypeName, InputFrame, OutputFrame, WriteMode
+from laken.types import DataFrameTypeName, FileWrite, InputFrame, OutputFrame, WriteMode
 from laken.workspace import DEFAULT_MAX_MIRROR_MB, DEFAULT_MAX_SAMPLE_ROWS, FabricTableFetcher
 
 
@@ -21,6 +21,7 @@ class Lakehouse:
         *,
         root: str | os.PathLike = ".laken/workspace",
         lakehouse: str | None = None,
+        lakehouse_id: str | None = None,
         workspace_id: str | None = None,
         workspace_name: str | None = None,
         metadata_path: str | os.PathLike | None = None,
@@ -29,11 +30,13 @@ class Lakehouse:
         max_sample_rows: int = DEFAULT_MAX_SAMPLE_ROWS,
     ):
         load_environment()
+        ensure_logging()
         if _is_fabric_context():
             from laken.fabric_lakehouse import FabricLakehouse
 
             self._implementation: LakehouseProtocol = FabricLakehouse(
                 lakehouse=lakehouse,
+                lakehouse_id=lakehouse_id,
                 workspace_id=workspace_id,
                 workspace_name=workspace_name,
             )
@@ -45,6 +48,7 @@ class Lakehouse:
             self._implementation = LocalLakehouse(
                 root=root,
                 lakehouse=lakehouse,
+                lakehouse_id=lakehouse_id,
                 workspace_id=workspace_id,
                 workspace_name=workspace_name,
                 metadata_path=metadata_path,
@@ -163,21 +167,11 @@ class Lakehouse:
     def drop_table(self, name: str) -> None:
         self._implementation.drop_table(name)
 
-    @overload
-    def read_file(self, path: str, *, frame_type: Literal["pandas"] = "pandas") -> pd.DataFrame: ...
+    def read_file(self, path: str) -> bytes:
+        return self._implementation.read_file(path)
 
-    @overload
-    def read_file(self, path: str, *, frame_type: Literal["spark"]) -> SparkDataFrame: ...
-
-    @overload
-    def read_file(self, path: str, *, frame_type: Literal["polars"]) -> pl.DataFrame: ...
-
-    def read_file(self, path: str, *, frame_type: DataFrameTypeName | None = None) -> OutputFrame:
-        kind = _default_frame_type(self._implementation) if frame_type is None else frame_type
-        return self._implementation.read_file(path, frame_type=kind)
-
-    def write_file(self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite") -> None:
-        self._implementation.write_file(df, path, mode=mode)
+    def write_file(self, data: FileWrite, path: str, *, mode: WriteMode = "overwrite") -> None:
+        self._implementation.write_file(data, path, mode=mode)
 
     def file_exists(self, path: str) -> bool:
         return self._implementation.file_exists(path)
@@ -192,8 +186,12 @@ def _is_fabric_context() -> bool:
     except ImportError:
         return False
     try:
-        context = notebookutils.runtime.context
-    except Exception:
+        runtime = notebookutils.runtime
+    except AttributeError:
+        return False
+    try:
+        context = runtime.context
+    except AttributeError:
         return False
     get = getattr(context, "get", None)
     if not callable(get):

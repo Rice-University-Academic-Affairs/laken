@@ -188,16 +188,20 @@ lh.drop_table("marketing.products")
 
 ```python
 lh.write_file(df, "exports/summary.parquet")
-lh.read_file("exports/summary.parquet", frame_type="pandas")
+lh.write_file(raw_bytes, "exports/notes.txt")
+raw = lh.read_file("exports/summary.parquet")
 lh.file_exists("exports/summary.parquet")
 lh.delete_file("exports/summary.parquet")
 ```
 
-**Warehouse tables** — Spark `synapsesql` in Fabric; local parquet stand-in for tests.
+**Warehouse tables** — Spark `synapsesql` in Fabric notebooks only.
 
 ```python
 lh.load_table_from_warehouse("SalesOrderHeader", "SalesWarehouse", frame_type="pandas")
 ```
+
+`read_file` returns raw bytes (from local cache or OneLake). Parse into pandas, polars, or Spark
+outside `Lakehouse` if you need a dataframe.
 
 **Other lakehouses** — defaults come from notebook context in Fabric; override locally
 or in notebooks:
@@ -232,6 +236,17 @@ unchanged.
 `laken reset <table>` throws away local edits and downloads from Fabric again. The table
 must have come from Fabric originally.
 
+### Logging
+
+laken logs to stderr when you use `Lakehouse` or the CLI. Default level is INFO. To see
+more detail:
+
+```python
+import logging
+
+logging.getLogger("laken").setLevel(logging.DEBUG)
+```
+
 ### Environment variables
 
 Root `.env` is loaded when you construct `Lakehouse` or `LocalLakehouse`, or run the
@@ -243,10 +258,10 @@ Root `.env` is loaded when you construct `Lakehouse` or `LocalLakehouse`, or run
 | `AZURE_TENANT_ID` | Auth (fetch + deploy) |
 | `AZURE_CLIENT_ID` | Auth (fetch + deploy) |
 | `AZURE_CLIENT_SECRET` | Auth (fetch + deploy) |
-| `FABRIC_WORKSPACE_NAME` | Local table fetch |
-| `FABRIC_LAKEHOUSE_NAME` | Local table fetch |
+| `FABRIC_WORKSPACE_NAME` | Local Fabric fetch (all four name/ID vars required) |
+| `FABRIC_LAKEHOUSE_NAME` | Local Fabric fetch |
 | `FABRIC_WORKSPACE_ID` | OneLake paths; required for deploy |
-| `FABRIC_LAKEHOUSE_ID` | OneLake paths |
+| `FABRIC_LAKEHOUSE_ID` | OneLake paths; required for local Fabric fetch |
 | `FABRIC_ENVIRONMENT_ID` | Deploy target |
 
 `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, and `AZURE_CLIENT_SECRET` are credentials from an

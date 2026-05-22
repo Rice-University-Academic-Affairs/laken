@@ -5,20 +5,24 @@ import shutil
 from pathlib import Path
 
 import pyarrow as pa
+import pyarrow.csv as pacsv
+import pyarrow.dataset as pads
 import pyarrow.parquet as pq
+import requests
 from deltalake import DeltaTable, write_deltalake
+from deltalake.exceptions import TableNotFoundError
 
 from laken._env import load_environment
 from laken.frames import from_arrow, to_arrow
-from laken.logger import logger
+from laken.logger import ensure_logging, logger
 from laken.onelake_fetcher import default_fabric_fetcher
 from laken.table_names import (
-    format_fabric_table_name,
+    TableRef,
     format_table_name,
     is_four_part_table_name,
-    parse_table_name,
+    resolve_table_ref,
 )
-from laken.types import DataFrameTypeName, InputFrame, OutputFrame, WriteMode
+from laken.types import DataFrameTypeName, FileWrite, InputFrame, OutputFrame, WriteMode
 from laken.workspace import (
     DEFAULT_MAX_MIRROR_MB,
     DEFAULT_MAX_SAMPLE_ROWS,
@@ -37,6 +41,7 @@ class LocalLakehouse:
         root: str | os.PathLike = ".laken/workspace",
         *,
         lakehouse: str | None = None,
+        lakehouse_id: str | None = None,
         workspace_id: str | None = None,
         workspace_name: str | None = None,
         metadata_path: str | os.PathLike | None = None,
@@ -45,9 +50,10 @@ class LocalLakehouse:
         max_sample_rows: int = DEFAULT_MAX_SAMPLE_ROWS,
     ):
         load_environment()
+        ensure_logging()
         self._root = Path(root).resolve()
         self._lakehouse = lakehouse or os.getenv("FABRIC_LAKEHOUSE_NAME")
-        self._lakehouse_id = os.getenv("FABRIC_LAKEHOUSE_ID")
+        self._lakehouse_id = lakehouse_id or os.getenv("FABRIC_LAKEHOUSE_ID")
         self._workspace_id = workspace_id or os.getenv("FABRIC_WORKSPACE_ID")
         self._workspace_name = workspace_name or os.getenv("FABRIC_WORKSPACE_NAME")
         self._fabric_fetcher_arg = fabric_fetcher
@@ -100,8 +106,8 @@ class LocalLakehouse:
         workspace_id: str | None = None,
         frame_type: DataFrameTypeName = "pandas",
     ) -> OutputFrame:
-        _ = warehouse_name, schema, workspace_id
-        return self.read_file(table_name, frame_type=frame_type)
+        _ = table_name, warehouse_name, schema, workspace_id, frame_type
+        raise NotImplementedError("load_table_from_warehouse is only available in Fabric notebooks")
 
     def write_table(self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite") -> None:
         table_dir = self._table_dir(name)
@@ -153,32 +159,65 @@ class LocalLakehouse:
         shutil.rmtree(self._table_dir(name), ignore_errors=True)
         self._metadata.remove(self._table_key(name))
 
-    def read_file(self, path: str, *, frame_type: DataFrameTypeName = "pandas") -> OutputFrame:
+    def read_file(self, path: str) -> bytes:
         file_path = self._file_path(path)
-        if not file_path.is_file():
+        if file_path.is_file() or _parquet_dataset_dir(file_path).is_dir():
+            logger.debug("Reading local file %s", path)
+            return _read_stored_file_bytes(file_path)
+        fabric_fetcher = self._resolve_fabric_fetcher()
+        if fabric_fetcher is None:
             raise FileNotFoundError(f"file not found: {path}")
-        logger.debug("Reading local file %s", path)
-        return from_arrow(pq.read_table(file_path), frame_type)
-
-    def write_file(self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite") -> None:
-        file_path = self._file_path(path)
-        arrow_table = to_arrow(df)
-        if mode == "overwrite":
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            pq.write_table(arrow_table, file_path)
-            return
-        if file_path.is_file():
-            existing = pq.read_table(file_path)
-            pq.write_table(pa.concat_tables([existing, arrow_table]), file_path)
-            return
+        logger.debug("Hydrating file %s from Fabric", path)
+        data = fabric_fetcher.fetch_file(path)
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        pq.write_table(arrow_table, file_path)
+        file_path.write_bytes(data)
+        return data
+
+    def write_file(self, data: FileWrite, path: str, *, mode: WriteMode = "overwrite") -> None:
+        file_path = self._file_path(path)
+        if isinstance(data, bytes):
+            _ensure_storage_compatible(
+                file_path,
+                expected="file",
+                mode=mode,
+                suffix=file_path.suffix.lower(),
+            )
+            _write_bytes(file_path, data, mode=mode)
+            return
+        suffix = file_path.suffix.lower()
+        arrow_table = to_arrow(data)
+        if suffix == ".parquet":
+            expected = "parquet_dataset" if mode == "append" else "file"
+            _ensure_storage_compatible(
+                file_path,
+                expected=expected,
+                mode=mode,
+                suffix=suffix,
+            )
+            if mode == "overwrite":
+                _write_parquet_overwrite(file_path, arrow_table)
+            else:
+                _write_parquet_append(file_path, arrow_table)
+            return
+        if suffix == ".csv":
+            _ensure_storage_compatible(
+                file_path,
+                expected="file",
+                mode=mode,
+                suffix=suffix,
+            )
+            _write_csv(file_path, arrow_table, mode=mode)
+            return
+        raise ValueError(f"unsupported file extension for dataframe write: {suffix}")
 
     def file_exists(self, path: str) -> bool:
-        return self._file_path(path).exists()
+        file_path = self._file_path(path)
+        return file_path.is_file() or _parquet_dataset_dir(file_path).is_dir()
 
     def delete_file(self, path: str) -> None:
-        self._file_path(path).unlink(missing_ok=True)
+        file_path = self._file_path(path)
+        file_path.unlink(missing_ok=True)
+        shutil.rmtree(_parquet_dataset_dir(file_path), ignore_errors=True)
 
     def refresh_table(self, name: str) -> None:
         key = self._table_key(name)
@@ -221,26 +260,30 @@ class LocalLakehouse:
 
     def status(self) -> list[dict[str, str]]:
         rows: list[dict[str, str]] = []
+        seen: set[str] = set()
         for key, entry in sorted(self._metadata.tables().items()):
-            state = str(entry.get("state", "local"))
-            source = entry.get("source", {})
-            version = source.get("delta_version")
-            notes = self._status_notes(key, entry)
-            rows.append(
-                {
-                    "table": key,
-                    "state": state,
-                    "source_version": str(version) if version is not None else "-",
-                    "notes": notes,
-                }
-            )
-        return rows
+            seen.add(key)
+            rows.append(self._status_row(key, entry))
+        for key in self._metadata_keys_on_disk():
+            if key in seen:
+                continue
+            rows.append(self._status_row(key, self._inferred_metadata_entry(key)))
+        return sorted(rows, key=lambda row: row["table"])
+
+    def _table_ref(self, name: str) -> TableRef:
+        return resolve_table_ref(
+            name,
+            workspace_name=self._workspace_name,
+            workspace_id=self._workspace_id,
+            lakehouse_name=self._lakehouse,
+            lakehouse_id=self._lakehouse_id,
+        )
 
     def _table_dir(self, name: str) -> Path:
-        schema, table = parse_table_name(name)
-        if schema == "dbo":
-            return self._root / "Tables" / table
-        return self._root / "Tables" / schema / table
+        ref = self._table_ref(name)
+        if ref.schema == "dbo":
+            return self._root / "Tables" / ref.table
+        return self._root / "Tables" / ref.schema / ref.table
 
     def _hydrate_table(
         self,
@@ -263,10 +306,7 @@ class LocalLakehouse:
         )
 
     def _table_key(self, name: str) -> str:
-        schema, table = parse_table_name(name)
-        if schema == "dbo":
-            return table
-        return format_table_name(schema, table)
+        return self._table_ref(name).metadata_key()
 
     def _warn_about_cached_table(self, name: str) -> None:
         key = self._table_key(name)
@@ -278,11 +318,17 @@ class LocalLakehouse:
             logger.info("%s is using a %s-row development sample.", key, f"{sample_rows:,}")
         fabric_fetcher = self._resolve_fabric_fetcher()
         if fabric_fetcher is None:
+            logger.info(
+                "%s is cached Fabric data (%s). Credentials are not configured; "
+                "using local cache without checking freshness.",
+                key,
+                entry.get("state"),
+            )
             return
         source = entry.get("source", {})
         try:
             current = fabric_fetcher.inspect_table(source.get("table", name))
-        except Exception:
+        except _FRESHNESS_CHECK_ERRORS:
             logger.info("Could not check Fabric freshness. Using local cached %s.", key)
             return
         cached_version = source.get("delta_version")
@@ -308,11 +354,14 @@ class LocalLakehouse:
         stripped = name.strip()
         if is_four_part_table_name(stripped):
             return stripped
+        ref = self._table_ref(stripped)
         if self._can_resolve_fabric_name():
-            schema, table = parse_table_name(stripped)
-            workspace_name = self._workspace_name or self._workspace_id or ""
-            lakehouse = self._lakehouse or self._lakehouse_id or ""
-            return format_fabric_table_name(workspace_name, lakehouse, schema, table)
+            return TableRef(
+                schema=ref.schema,
+                table=ref.table,
+                workspace=ref.workspace or self._workspace_name,
+                lakehouse=ref.lakehouse or self._lakehouse,
+            ).fabric_four_part()
         return stripped
 
     def _fetch_and_cache(
@@ -329,9 +378,7 @@ class LocalLakehouse:
             raise FileNotFoundError(f"table not found: {local_name}")
         try:
             info = fabric_fetcher.inspect_table(fetch_name)
-        except Exception as err:
-            if type(err).__name__ != "TableNotFoundError":
-                raise
+        except TableNotFoundError as err:
             raise FileNotFoundError(f"table not found: {local_name}") from err
         table_dir = self._table_dir(local_name)
         key = self._table_key(local_name)
@@ -378,9 +425,9 @@ class LocalLakehouse:
         return entry
 
     def _can_resolve_fabric_name(self) -> bool:
-        if self._workspace_name and self._lakehouse:
-            return True
-        return bool(self._workspace_id and self._lakehouse_id)
+        return bool(
+            self._workspace_name and self._workspace_id and self._lakehouse and self._lakehouse_id
+        )
 
     def _resolve_fabric_fetcher(self) -> FabricTableFetcher | None:
         if self._fabric_fetcher_resolved:
@@ -388,6 +435,7 @@ class LocalLakehouse:
         logger.debug("Resolving Fabric fetcher from environment")
         self._fabric_fetcher = default_fabric_fetcher(
             lakehouse=self._lakehouse,
+            lakehouse_id=self._lakehouse_id,
             workspace_id=self._workspace_id,
             workspace_name=self._workspace_name,
         )
@@ -448,7 +496,43 @@ class LocalLakehouse:
             return int(cache["sample_rows"])
         return self._max_sample_rows
 
+    def _status_row(self, key: str, entry: dict) -> dict[str, str]:
+        state = str(entry.get("state", "local"))
+        source = entry.get("source", {})
+        version = source.get("delta_version")
+        notes = self._status_notes(key, entry)
+        return {
+            "table": key,
+            "state": state,
+            "source_version": str(version) if version is not None else "-",
+            "notes": notes,
+        }
+
+    def _metadata_keys_on_disk(self) -> list[str]:
+        keys: list[str] = []
+        for name in self.list_tables():
+            keys.append(self._table_key(name))
+        return keys
+
+    def _inferred_metadata_entry(self, key: str) -> dict:
+        return {
+            "state": "local",
+            "path": display_path(self._table_dir_from_key(key)),
+            "inferred": True,
+        }
+
+    def _table_dir_from_key(self, key: str) -> Path:
+        if "." in key:
+            schema, table = key.split(".", 1)
+        else:
+            schema, table = "dbo", key
+        if schema == "dbo":
+            return self._root / "Tables" / table
+        return self._root / "Tables" / schema / table
+
     def _status_notes(self, key: str, entry: dict) -> str:
+        if entry.get("inferred"):
+            return "no metadata record"
         state = entry.get("state")
         if state == "local":
             return "local-only"
@@ -462,7 +546,7 @@ class LocalLakehouse:
         if fabric_fetcher is not None and cached_version is not None:
             try:
                 current = fabric_fetcher.inspect_table(source.get("table", key))
-            except Exception:
+            except _FRESHNESS_CHECK_ERRORS:
                 notes.append("freshness unknown")
             else:
                 if current.delta_version != cached_version:
@@ -479,6 +563,102 @@ class LocalLakehouse:
         if normalized.is_absolute() or ".." in normalized.parts:
             raise ValueError(f"invalid file path: {path}")
         return self._root / "Files" / normalized
+
+
+_FRESHNESS_CHECK_ERRORS = (TableNotFoundError, requests.RequestException, OSError)
+
+
+def _parquet_dataset_dir(file_path: Path) -> Path:
+    return file_path.parent / f"{file_path.name}.d"
+
+
+def _read_stored_file_bytes(file_path: Path) -> bytes:
+    dataset_dir = _parquet_dataset_dir(file_path)
+    if dataset_dir.is_dir():
+        parts = sorted(dataset_dir.glob("part-*.parquet"))
+        if len(parts) == 1:
+            return parts[0].read_bytes()
+        dataset = pads.dataset(dataset_dir, format="parquet")
+        sink = pa.BufferOutputStream()
+        writer = pq.ParquetWriter(sink, dataset.schema)
+        for batch in dataset.to_batches():
+            writer.write_batch(batch)
+        writer.close()
+        return sink.getvalue().to_pybytes()
+    return file_path.read_bytes()
+
+
+def _file_storage_shape(file_path: Path) -> str | None:
+    if _parquet_dataset_dir(file_path).is_dir():
+        return "parquet_dataset"
+    if file_path.is_file():
+        return "file"
+    return None
+
+
+def _storage_shapes_compatible(existing: str, expected: str, *, suffix: str) -> bool:
+    if existing == expected:
+        return True
+    return suffix == ".parquet" and existing == "file" and expected == "parquet_dataset"
+
+
+def _ensure_storage_compatible(
+    file_path: Path,
+    *,
+    expected: str,
+    mode: WriteMode,
+    suffix: str,
+) -> None:
+    existing = _file_storage_shape(file_path)
+    if existing is None or mode == "overwrite":
+        return
+    if not _storage_shapes_compatible(existing, expected, suffix=suffix):
+        raise ValueError(
+            f"cannot {mode} {file_path.name}: existing storage is {existing}, expected {expected}"
+        )
+
+
+def _write_bytes(file_path: Path, data: bytes, *, mode: WriteMode) -> None:
+    if mode == "overwrite":
+        shutil.rmtree(_parquet_dataset_dir(file_path), ignore_errors=True)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    if mode == "append" and file_path.is_file():
+        with file_path.open("ab") as handle:
+            handle.write(data)
+        return
+    file_path.write_bytes(data)
+
+
+def _write_csv(file_path: Path, arrow_table: pa.Table, *, mode: WriteMode) -> None:
+    if mode == "overwrite":
+        shutil.rmtree(_parquet_dataset_dir(file_path), ignore_errors=True)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    if mode == "append" and file_path.is_file():
+        existing = pacsv.read_csv(file_path)
+        arrow_table = pa.concat_tables([existing, arrow_table])
+    pacsv.write_csv(arrow_table, file_path)
+
+
+def _write_parquet_overwrite(file_path: Path, arrow_table: pa.Table) -> None:
+    shutil.rmtree(_parquet_dataset_dir(file_path), ignore_errors=True)
+    if file_path.is_file():
+        file_path.unlink()
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(arrow_table, file_path)
+
+
+def _write_parquet_append(file_path: Path, arrow_table: pa.Table) -> None:
+    dataset_dir = _parquet_dataset_dir(file_path)
+    if file_path.is_file():
+        dataset_dir.mkdir(parents=True, exist_ok=True)
+        file_path.rename(dataset_dir / "part-00000.parquet")
+    elif not dataset_dir.is_dir():
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        pq.write_table(arrow_table, file_path)
+        return
+    dataset_dir.mkdir(parents=True, exist_ok=True)
+    part_count = len(list(dataset_dir.glob("part-*.parquet")))
+    pq.write_table(arrow_table, dataset_dir / f"part-{part_count:05d}.parquet")
 
 
 def _format_bytes(size_bytes: int) -> str:

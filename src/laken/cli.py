@@ -12,7 +12,7 @@ from laken.deploy.build import run_build
 from laken.deploy.config import load_deploy_config, require_project_root
 from laken.deploy.fabric_client import publish_wheel
 from laken.deploy.project import ProjectMetadata, read_project_metadata
-from laken.deploy.wheel import resolve_wheel
+from laken.deploy.wheel import wheel_from_build
 from laken.local_lakehouse import LocalLakehouse
 
 load_environment()
@@ -26,8 +26,13 @@ def deploy(
     environment_id: str | None = typer.Option(None, "--environment-id"),
 ) -> None:
     def run() -> None:
-        _, wheel_path = _build_project()
-        _upload_project(workspace_id, environment_id, wheel_path=wheel_path)
+        _, wheel_path, wheel_version = _build_project()
+        _upload_project(
+            workspace_id,
+            environment_id,
+            wheel_path=wheel_path,
+            wheel_version=wheel_version,
+        )
 
     _exit_on_error(run)
 
@@ -91,16 +96,16 @@ def _print_status(rows: list[dict[str, str]]) -> None:
         typer.echo(" ".join(value.ljust(widths[index]) for index, value in enumerate(row)))
 
 
-def _build_project() -> tuple[ProjectMetadata, Path]:
+def _build_project() -> tuple[ProjectMetadata, Path, Version]:
     require_project_root()
     metadata = read_project_metadata()
     try:
-        run_build()
+        run_build(metadata.name)
     except subprocess.CalledProcessError as exc:
         raise typer.Exit(exc.returncode or 1) from exc
-    wheel_path, _ = resolve_wheel(metadata.name, metadata.wheel_version_pin())
+    wheel_path, wheel_version = wheel_from_build(metadata.name)
     typer.echo(f"Built wheel: {wheel_path}")
-    return metadata, wheel_path
+    return metadata, wheel_path, wheel_version
 
 
 def _upload_project(
@@ -108,13 +113,14 @@ def _upload_project(
     environment_id: str | None = None,
     *,
     wheel_path: Path | None = None,
+    wheel_version: Version | None = None,
 ) -> None:
     require_project_root()
     config = load_deploy_config(workspace_id, environment_id)
     metadata = read_project_metadata()
     if wheel_path is None:
-        wheel_path, wheel_version = resolve_wheel(metadata.name, metadata.wheel_version_pin())
-    else:
+        wheel_path, wheel_version = wheel_from_build(metadata.name)
+    elif wheel_version is None:
         _, parsed_version, _, _ = parse_wheel_filename(wheel_path.name)
         wheel_version = (
             parsed_version if isinstance(parsed_version, Version) else Version(str(parsed_version))

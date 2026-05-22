@@ -32,6 +32,9 @@ def to_arrow(df: InputFrame) -> ArrowTable:
         return pa.Table.from_pandas(df)
     if kind == "polars":
         return df.to_arrow()
+    to_arrow_fn = getattr(df, "toArrow", None)
+    if callable(to_arrow_fn):
+        return to_arrow_fn()
     return pa.Table.from_pandas(df.toPandas())
 
 
@@ -47,7 +50,10 @@ def from_arrow(
     try:
         if spark is None:
             spark = get_or_create_spark_session()
-        return spark.createDataFrame(table.to_pandas())
+        try:
+            return spark.createDataFrame(table)
+        except TypeError:
+            return spark.createDataFrame(table.to_pandas())
     except ImportError as err:
         raise spark_import_error() from err
 
@@ -58,7 +64,10 @@ def to_spark(df: InputFrame, spark) -> OutputFrame:
         return df
     if kind == "pandas":
         return spark.createDataFrame(df)
-    return spark.createDataFrame(df.to_pandas())
+    try:
+        return spark.createDataFrame(df.to_arrow())
+    except TypeError:
+        return spark.createDataFrame(df.to_pandas())
 
 
 def from_spark(spark_df, frame_type: DataFrameTypeName) -> OutputFrame:
@@ -66,4 +75,7 @@ def from_spark(spark_df, frame_type: DataFrameTypeName) -> OutputFrame:
         return spark_df
     if frame_type == "pandas":
         return spark_df.toPandas()
+    to_arrow_fn = getattr(spark_df, "toArrow", None)
+    if callable(to_arrow_fn):
+        return pl.from_arrow(to_arrow_fn())
     return pl.from_pandas(spark_df.toPandas())

@@ -1,6 +1,9 @@
 import json
 
 import pandas as pd
+import pyarrow as pa
+import pyarrow.csv as pacsv
+import pyarrow.parquet as pq
 import pytest
 from integration.conftest import (
     INTEGRATION_CSV,
@@ -35,7 +38,7 @@ class TestFabricFetcher:
         assert table.num_rows == 3
 
     def test_fetch_csv_matches_spec(self, fabric_fetcher):
-        table = fabric_fetcher.fetch_file(INTEGRATION_CSV)
+        table = pacsv.read_csv(pa.BufferReader(fabric_fetcher.fetch_file(INTEGRATION_CSV)))
         assert_frame_matches_spec(from_arrow(table, "pandas"))
 
     def test_fetch_table_four_part_name(self, fabric_fetcher):
@@ -153,33 +156,44 @@ class TestFabricLakehouseWrite:
 
 class TestFabricLakehouseFiles:
     def test_fetch_csv_and_write_local_parquet(self, fabric_lakehouse, fabric_fetcher, df_kind):
-        arrow = fabric_fetcher.fetch_file(INTEGRATION_CSV)
+        arrow = pacsv.read_csv(pa.BufferReader(fabric_fetcher.fetch_file(INTEGRATION_CSV)))
         frame = from_arrow(arrow, df_kind)
         fabric_lakehouse.write_file(frame, "integration/scratch.parquet")
-        result = fabric_lakehouse.read_file("integration/scratch.parquet", frame_type=df_kind)
+        data = fabric_lakehouse.read_file("integration/scratch.parquet")
+        result = from_arrow(pq.read_table(pa.BufferReader(data)), df_kind)
         assert dataframe_kind(result) == df_kind
         assert_frame_matches_spec(result)
 
     def test_local_file_overwrite(self, fabric_lakehouse, fabric_fetcher):
-        arrow = fabric_fetcher.fetch_file(INTEGRATION_CSV)
+        arrow = pacsv.read_csv(pa.BufferReader(fabric_fetcher.fetch_file(INTEGRATION_CSV)))
         frame = from_arrow(arrow, "pandas")
         fabric_lakehouse.write_file(frame, "integration/overwrite.parquet")
         replacement = pd.DataFrame({"id": [99], "name": ["Z"], "value": [0.0]})
         fabric_lakehouse.write_file(replacement, "integration/overwrite.parquet", mode="overwrite")
-        result = fabric_lakehouse.read_file("integration/overwrite.parquet", frame_type="pandas")
+        result = from_arrow(
+            pq.read_table(
+                pa.BufferReader(fabric_lakehouse.read_file("integration/overwrite.parquet"))
+            ),
+            "pandas",
+        )
         assert len(result) == 1
 
     def test_local_file_append(self, fabric_lakehouse, fabric_fetcher):
-        arrow = fabric_fetcher.fetch_file(INTEGRATION_CSV)
+        arrow = pacsv.read_csv(pa.BufferReader(fabric_fetcher.fetch_file(INTEGRATION_CSV)))
         frame = from_arrow(arrow, "pandas")
         fabric_lakehouse.write_file(frame, "integration/append.parquet")
         extra = pd.DataFrame({"id": [11], "name": ["Kate"], "value": [110.0]})
         fabric_lakehouse.write_file(extra, "integration/append.parquet", mode="append")
-        result = fabric_lakehouse.read_file("integration/append.parquet", frame_type="pandas")
+        result = from_arrow(
+            pq.read_table(
+                pa.BufferReader(fabric_lakehouse.read_file("integration/append.parquet"))
+            ),
+            "pandas",
+        )
         assert len(result) == 11
 
     def test_file_exists_and_delete(self, fabric_lakehouse, fabric_fetcher):
-        arrow = fabric_fetcher.fetch_file(INTEGRATION_CSV)
+        arrow = pacsv.read_csv(pa.BufferReader(fabric_fetcher.fetch_file(INTEGRATION_CSV)))
         path = "integration/delete.parquet"
         fabric_lakehouse.write_file(from_arrow(arrow, "pandas"), path)
         assert fabric_lakehouse.file_exists(path)
