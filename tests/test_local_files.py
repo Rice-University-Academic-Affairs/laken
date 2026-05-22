@@ -25,11 +25,6 @@ class TestLocalFiles:
         result = lakehouse.read_file("data/sample.parquet", frame_type="pandas")
         assert len(result) == 3
 
-    def test_list_files_nested(self, lakehouse, sample_pandas):
-        lakehouse.write_file(sample_pandas, "nested/sample.parquet")
-        files = lakehouse.list_files("nested")
-        assert "nested/sample.parquet" in files
-
     def test_file_exists_true(self, lakehouse, sample_pandas):
         lakehouse.write_file(sample_pandas, "data/sample.parquet")
         assert lakehouse.file_exists("data/sample.parquet")

@@ -47,6 +47,7 @@ class LocalLakehouse:
         load_environment()
         self._root = Path(root).resolve()
         self._lakehouse = lakehouse or os.getenv("FABRIC_LAKEHOUSE_NAME")
+        self._lakehouse_id = os.getenv("FABRIC_LAKEHOUSE_ID")
         self._workspace_id = workspace_id or os.getenv("FABRIC_WORKSPACE_ID")
         self._workspace_name = workspace_name or os.getenv("FABRIC_WORKSPACE_NAME")
         self._fabric_fetcher_arg = fabric_fetcher
@@ -116,14 +117,7 @@ class LocalLakehouse:
                 "It will not be refreshed from Fabric unless reset."
             )
         if mode == "overwrite" or not (table_dir / "_delta_log").is_dir():
-            shutil.rmtree(table_dir, ignore_errors=True)
-            table_dir.parent.mkdir(parents=True, exist_ok=True)
-            write_deltalake(
-                str(table_dir),
-                arrow_table,
-                mode="overwrite",
-                schema_mode="overwrite",
-            )
+            self._write_delta_table(table_dir, arrow_table)
         else:
             table_dir.parent.mkdir(parents=True, exist_ok=True)
             write_deltalake(str(table_dir), arrow_table, mode="append")
@@ -180,17 +174,6 @@ class LocalLakehouse:
         file_path.parent.mkdir(parents=True, exist_ok=True)
         pq.write_table(arrow_table, file_path)
 
-    def list_files(self, path: str = "") -> list[str]:
-        base = self._file_path(path) if path else self._root / "Files"
-        if not base.is_dir():
-            return []
-        files_root = self._root / "Files"
-        results: list[str] = []
-        for item in sorted(base.rglob("*")):
-            if item.is_file():
-                results.append(str(item.relative_to(files_root)).replace("\\", "/"))
-        return results
-
     def file_exists(self, path: str) -> bool:
         return self._file_path(path).exists()
 
@@ -208,11 +191,13 @@ class LocalLakehouse:
         source = entry.get("source")
         if source is None:
             raise ValueError(f"table has no Fabric source: {key}")
+        cache_mb, cache_rows, force_sample = self._stored_cache_policy(entry)
         refreshed = self._fetch_and_cache(
             name,
             source.get("table", name),
-            max_mirror_mb=self._max_mirror_mb,
-            max_sample_rows=self._max_sample_rows,
+            max_mirror_mb=cache_mb,
+            max_sample_rows=cache_rows,
+            force_sample=force_sample,
         )
         version = refreshed.get("source", {}).get("delta_version")
         logger.info("Refreshed %s from Fabric version %s.", key, version)
@@ -223,11 +208,13 @@ class LocalLakehouse:
         if entry is None or entry.get("source") is None:
             raise ValueError(f"laken: {key} has no Fabric source to reset.")
         source = entry["source"]
+        cache_mb, cache_rows, force_sample = self._stored_cache_policy(entry)
         reset = self._fetch_and_cache(
             name,
             source.get("table", name),
-            max_mirror_mb=self._max_mirror_mb,
-            max_sample_rows=self._max_sample_rows,
+            max_mirror_mb=cache_mb,
+            max_sample_rows=cache_rows,
+            force_sample=force_sample,
         )
         version = reset.get("source", {}).get("delta_version")
         logger.info("Reset %s to Fabric version %s.", key, version)
@@ -323,7 +310,9 @@ class LocalLakehouse:
             return stripped
         if self._can_resolve_fabric_name():
             schema, table = parse_table_name(stripped)
-            return format_fabric_table_name(self._workspace_name, self._lakehouse, schema, table)
+            workspace_name = self._workspace_name or self._workspace_id or ""
+            lakehouse = self._lakehouse or self._lakehouse_id or ""
+            return format_fabric_table_name(workspace_name, lakehouse, schema, table)
         return stripped
 
     def _fetch_and_cache(
@@ -333,6 +322,7 @@ class LocalLakehouse:
         *,
         max_mirror_mb: int,
         max_sample_rows: int,
+        force_sample: bool = False,
     ) -> dict:
         fabric_fetcher = self._resolve_fabric_fetcher()
         if fabric_fetcher is None:
@@ -347,7 +337,7 @@ class LocalLakehouse:
         key = self._table_key(local_name)
         remote_size_bytes = info.size_bytes or 0
         mirror_limit = mirror_limit_bytes(max_mirror_mb)
-        if remote_size_bytes > mirror_limit:
+        if force_sample or remote_size_bytes > mirror_limit:
             logger.info(
                 "%s is %s on Fabric (over %s MB limit).",
                 key,
@@ -388,7 +378,9 @@ class LocalLakehouse:
         return entry
 
     def _can_resolve_fabric_name(self) -> bool:
-        return bool(self._workspace_name and self._lakehouse)
+        if self._workspace_name and self._lakehouse:
+            return True
+        return bool(self._workspace_id and self._lakehouse_id)
 
     def _resolve_fabric_fetcher(self) -> FabricTableFetcher | None:
         if self._fabric_fetcher_resolved:
@@ -403,14 +395,42 @@ class LocalLakehouse:
         return self._fabric_fetcher
 
     def _write_delta_table(self, table_dir: Path, arrow_table: pa.Table) -> None:
-        shutil.rmtree(table_dir, ignore_errors=True)
-        table_dir.parent.mkdir(parents=True, exist_ok=True)
-        write_deltalake(
-            str(table_dir),
-            arrow_table,
-            mode="overwrite",
-            schema_mode="overwrite",
-        )
+        parent = table_dir.parent
+        parent.mkdir(parents=True, exist_ok=True)
+        staging = parent / f".{table_dir.name}.staging"
+        backup = parent / f".{table_dir.name}.backup"
+        shutil.rmtree(staging, ignore_errors=True)
+        shutil.rmtree(backup, ignore_errors=True)
+        try:
+            write_deltalake(
+                str(staging),
+                arrow_table,
+                mode="overwrite",
+                schema_mode="overwrite",
+            )
+            if table_dir.exists():
+                table_dir.rename(backup)
+            staging.rename(table_dir)
+            shutil.rmtree(backup, ignore_errors=True)
+        except Exception:
+            shutil.rmtree(staging, ignore_errors=True)
+            if backup.exists() and not table_dir.exists():
+                backup.rename(table_dir)
+            raise
+
+    def _stored_cache_policy(self, entry: dict) -> tuple[int, int, bool]:
+        cache = entry.get("cache", {})
+        state = entry.get("state")
+        if state == "sample" or cache.get("mode") == "sample":
+            sample_rows = self._cached_max_sample_rows(entry)
+            mirror_mb = cache.get("max_mirror_mb")
+            resolved_mb = int(mirror_mb) if mirror_mb is not None else self._max_mirror_mb
+            return resolved_mb, sample_rows, True
+        mirror_mb = cache.get("max_mirror_mb")
+        sample_rows = cache.get("max_sample_rows")
+        resolved_mb = int(mirror_mb) if mirror_mb is not None else self._max_mirror_mb
+        resolved_rows = int(sample_rows) if sample_rows is not None else self._max_sample_rows
+        return resolved_mb, resolved_rows, False
 
     def _source_from_info(self, info: FabricTableInfo) -> dict:
         return {

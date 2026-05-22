@@ -109,10 +109,15 @@ def default_fabric_fetcher(
     resolved_workspace_name = workspace_name or os.getenv("FABRIC_WORKSPACE_NAME")
     resolved_lakehouse = lakehouse or os.getenv("FABRIC_LAKEHOUSE_NAME")
     resolved_workspace_id = workspace_id or os.getenv("FABRIC_WORKSPACE_ID")
-    if not resolved_workspace_name or not resolved_lakehouse:
-        return None
     resolved_lakehouse_id = os.getenv("FABRIC_LAKEHOUSE_ID")
-    if not resolved_lakehouse_id and resolved_workspace_id:
+    if resolved_workspace_id and resolved_lakehouse_id:
+        if not resolved_workspace_name:
+            resolved_workspace_name = resolved_workspace_id
+        if not resolved_lakehouse:
+            resolved_lakehouse = resolved_lakehouse_id
+    elif not resolved_workspace_name or not resolved_lakehouse:
+        return None
+    if not resolved_lakehouse_id and resolved_workspace_id and resolved_lakehouse:
         try:
             resolved_lakehouse_id = _resolve_lakehouse_id(resolved_workspace_id, resolved_lakehouse)
         except requests.RequestException:

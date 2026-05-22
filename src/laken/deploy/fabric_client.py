@@ -41,7 +41,10 @@ class FabricEnvironmentPublisher:
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
         _raise_for_status(response)
-        typer.echo(f"Publish request accepted (HTTP {response.status_code}).")
+        typer.echo(
+            "Publish submitted. Fabric rebuilds the Environment asynchronously; "
+            "notebooks can import after the Environment publish completes."
+        )
 
     def _token(self) -> str:
         response = requests.post(

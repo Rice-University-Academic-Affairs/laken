@@ -50,8 +50,9 @@ wheel before publishing to a Fabric environment.
 ## Develop against your Fabric lakehouse
 
 Set your credentials, select your workspace and lakehouse in a `.env` file at your
-project root (or export them in your shell). Importing `laken` loads that file
-automatically; variables already set in the environment are not overwritten.
+project root (or export them in your shell). `Lakehouse()` and the `laken` CLI load
+that file from the current working directory; variables already set in the environment
+are not overwritten. Importing `laken` alone does not load `.env`.
 
 ```env
 AZURE_TENANT_ID=...
@@ -188,7 +189,6 @@ lh.drop_table("marketing.products")
 ```python
 lh.write_file(df, "exports/summary.parquet")
 lh.read_file("exports/summary.parquet", frame_type="pandas")
-lh.list_files("exports")
 lh.file_exists("exports/summary.parquet")
 lh.delete_file("exports/summary.parquet")
 ```
@@ -217,7 +217,8 @@ laken reset <table>
 ```
 
 `laken deploy` builds the wheel from your repo's `pyproject.toml`, uploads it to a Fabric
-Environment, and publishes it so notebooks can import your package.
+Environment, and submits a publish. Fabric rebuilds the Environment asynchronously;
+notebooks can import your package after that publish completes.
 
 `laken status`, `laken refresh`, and `laken reset` manage the local `.laken/` cache on your
 laptop. They do not run inside Fabric notebooks.

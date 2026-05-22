@@ -227,13 +227,6 @@ class TestFabricDefaultLakehouse:
         writer.save.assert_called_with("Files/data/sample.parquet")
 
     @patch("laken.fabric_lakehouse.FabricLakehouse._notebookutils")
-    def test_list_files(self, mock_nu_fn, mock_notebookutils):
-        mock_nu_fn.return_value = mock_notebookutils
-        lh = FabricLakehouse()
-        assert lh.list_files("data") == ["sample.parquet"]
-        mock_notebookutils.fs.ls.assert_called_with("Files/data")
-
-    @patch("laken.fabric_lakehouse.FabricLakehouse._notebookutils")
     def test_file_exists(self, mock_nu_fn, mock_notebookutils):
         mock_nu_fn.return_value = mock_notebookutils
         lh = FabricLakehouse()

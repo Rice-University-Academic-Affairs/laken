@@ -40,9 +40,7 @@ def test_lakehouse_does_not_override_existing_env(tmp_path):
         "import os; from laken import Lakehouse; "
         "Lakehouse(); print(os.getenv('LAKEN_TEST_VAR', ''))"
     )
-    assert (
-        _run_script(tmp_path, script, extra_env={"LAKEN_TEST_VAR": "from-shell"}) == "from-shell"
-    )
+    assert _run_script(tmp_path, script, extra_env={"LAKEN_TEST_VAR": "from-shell"}) == "from-shell"
 
 
 def test_load_environment_loads_dotenv_from_cwd(tmp_path):

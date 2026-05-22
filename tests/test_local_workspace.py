@@ -141,6 +141,33 @@ def test_refresh_mirror_updates_cached_data_and_metadata(tmp_path, capture_laken
     assert "Refreshed raw_faculty from Fabric version 3." in capture_laken_logs.text
 
 
+def test_refresh_sample_table_keeps_sample_when_mirror_limit_increased(tmp_path):
+    root = tmp_path / ".laken" / "workspace"
+    fetcher = FakeFabricFetcher()
+    fetcher.add("fact_events", pa.table({"id": list(range(10))}), version=5, size_bytes=500)
+    lakehouse = LocalLakehouse(
+        root=root,
+        fabric_fetcher=fetcher,
+        max_mirror_mb=0,
+        max_sample_rows=2,
+    )
+    lakehouse.read_table("fact_events", frame_type="pandas")
+    fetcher.max_rows.clear()
+    fetcher.add("fact_events", pa.table({"id": [100, 101, 102, 103]}), version=6, size_bytes=50)
+
+    lakehouse = LocalLakehouse(
+        root=root,
+        fabric_fetcher=fetcher,
+        max_mirror_mb=100,
+        max_sample_rows=10000,
+    )
+    lakehouse.refresh_table("fact_events")
+
+    assert lakehouse.read_table("fact_events", frame_type="pandas")["id"].tolist() == [100, 101]
+    assert fetcher.max_rows == [2]
+    assert _metadata(root)["fact_events"]["state"] == "sample"
+
+
 def test_refresh_sample_table_re_fetches(tmp_path):
     root = tmp_path / ".laken" / "workspace"
     fetcher = FakeFabricFetcher()
@@ -272,6 +299,28 @@ def test_read_without_fetcher_raises_file_not_found(tmp_path):
 
 class TableNotFoundError(Exception):
     pass
+
+
+def test_write_delta_table_restores_backup_on_failure(tmp_path, monkeypatch):
+    root = tmp_path / ".laken" / "workspace"
+    fetcher = FakeFabricFetcher()
+    fetcher.add("raw_faculty", pa.table({"id": [1]}), version=1, size_bytes=100)
+    lakehouse = LocalLakehouse(root=root, fabric_fetcher=fetcher)
+    lakehouse.read_table("raw_faculty", frame_type="pandas")
+    table_dir = root / "Tables" / "raw_faculty"
+    assert (table_dir / "_delta_log").is_dir()
+
+    def fail_write(*args, **kwargs):
+        raise RuntimeError("write failed")
+
+    monkeypatch.setattr("laken.local_lakehouse.write_deltalake", fail_write)
+    fetcher.add("raw_faculty", pa.table({"id": [9]}), version=2, size_bytes=100)
+
+    with pytest.raises(RuntimeError, match="write failed"):
+        lakehouse.refresh_table("raw_faculty")
+
+    assert lakehouse.read_table("raw_faculty", frame_type="pandas")["id"].tolist() == [1]
+    assert (table_dir / "_delta_log").is_dir()
 
 
 def test_hydrate_maps_table_not_found_to_file_not_found(tmp_path):
