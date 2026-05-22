@@ -68,7 +68,7 @@ FABRIC_ENVIRONMENT_ID=...
 from laken import Lakehouse
 
 lh = Lakehouse()
-products = lh.read_table("marketing.products", as_="pandas")
+products = lh.read_table("marketing.products", frame_type="pandas")
 
 lh.write_table(products, "staging.products_snapshot")
 ```
@@ -113,7 +113,7 @@ from laken import Lakehouse
 
 
 def run_pipeline(lh: Lakehouse) -> None:
-    products = lh.read_table("marketing.products", as_="pandas")
+    products = lh.read_table("marketing.products", frame_type="pandas")
     summary = products.groupby("category", as_index=False)["amount"].sum()
     lh.write_table(summary, "staging.product_summary")
 ```
@@ -174,8 +174,8 @@ lh.write_table(df, "products")
 lh.write_table(df, "marketing.products", mode="append")
 
 df = lh.read_table("products")                    # pandas locally, Spark in Fabric
-df = lh.read_table("products", as_="spark")       # Spark (Fabric runtime)
-df = lh.read_table("marketing.products", as_="polars")
+df = lh.read_table("products", frame_type="spark")       # Spark (Fabric runtime)
+df = lh.read_table("marketing.products", frame_type="polars")
 
 lh.list_tables()
 lh.table_exists("marketing.products")
@@ -187,7 +187,7 @@ lh.drop_table("marketing.products")
 
 ```python
 lh.write_file(df, "exports/summary.parquet")
-lh.read_file("exports/summary.parquet", as_="pandas")
+lh.read_file("exports/summary.parquet", frame_type="pandas")
 lh.list_files("exports")
 lh.file_exists("exports/summary.parquet")
 lh.delete_file("exports/summary.parquet")
@@ -196,7 +196,7 @@ lh.delete_file("exports/summary.parquet")
 **Warehouse tables** — Spark `synapsesql` in Fabric; local parquet stand-in for tests.
 
 ```python
-lh.load_table_from_warehouse("SalesOrderHeader", "SalesWarehouse", as_="pandas")
+lh.load_table_from_warehouse("SalesOrderHeader", "SalesWarehouse", frame_type="pandas")
 ```
 
 **Other lakehouses** — defaults come from notebook context in Fabric; override locally
@@ -204,7 +204,7 @@ or in notebooks:
 
 ```python
 lh = Lakehouse(lakehouse="Sales_LH")
-lh.read_table("marketing.products", as_="pandas")
+lh.read_table("marketing.products", frame_type="pandas")
 ```
 
 ### CLI
@@ -233,8 +233,9 @@ must have come from Fabric originally.
 
 ### Environment variables
 
-Root `.env` is loaded when you `import laken` or run the `laken` CLI. Shell and CI
-variables take precedence. Set `PYTHON_DOTENV_DISABLED=1` to skip loading.
+Root `.env` is loaded when you construct `Lakehouse` or `LocalLakehouse`, or run the
+`laken` CLI. Shell and CI variables take precedence over `.env` values. Call
+`load_environment()` yourself only if you need env vars before creating a lakehouse instance.
 
 | Variable | Purpose |
 | :--- | :--- |

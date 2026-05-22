@@ -5,19 +5,17 @@ from pathlib import Path
 import requests
 import typer
 
+from laken._env import load_environment
 from laken.deploy.build import run_build
 from laken.deploy.config import load_deploy_config, require_project_root
 from laken.deploy.fabric_client import publish_wheel
 from laken.deploy.project import ProjectMetadata, read_project_metadata
 from laken.deploy.wheel import resolve_wheel
-from laken.local import LocalLakehouse
+from laken.local_lakehouse import LocalLakehouse
+
+load_environment()
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
-
-
-@app.callback()
-def main() -> None:
-    pass
 
 
 @app.command()

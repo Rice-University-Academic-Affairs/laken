@@ -1,35 +1,43 @@
-import laken._env  # noqa: F401
-from laken.fabric import FabricLakehouse
+from laken._env import load_environment
+from laken.fabric_lakehouse import FabricLakehouse
 from laken.lakehouse import Lakehouse
-from laken.local import LocalLakehouse
-from laken.protocol import LakehouseProtocol
-from laken.types import DfKind, InputFrame, OutputFrame, WriteMode
+from laken.lakehouse_protocol import LakehouseProtocol
+from laken.local_lakehouse import LocalLakehouse
+from laken.logger import logger, set_log_level
+from laken.types import DataFrameTypeName, InputFrame, OutputFrame, WriteMode
 
 
 def read_table(
     name: str,
     *,
-    as_: DfKind | None = None,
+    frame_type: DataFrameTypeName | None = None,
     max_mirror_mb: int | None = None,
     max_sample_rows: int | None = None,
 ) -> OutputFrame:
     return Lakehouse().read_table(
         name,
-        as_=as_,
+        frame_type=frame_type,
         max_mirror_mb=max_mirror_mb,
         max_sample_rows=max_sample_rows,
     )
 
 
-def write_table(name: str, df: InputFrame, *, mode: WriteMode = "overwrite") -> None:
+def write_table(df: InputFrame, name: str, *, mode: WriteMode = "overwrite") -> None:
     Lakehouse().write_table(df, name, mode=mode)
 
 
 __all__ = [
+    "DataFrameTypeName",
     "FabricLakehouse",
+    "InputFrame",
     "Lakehouse",
     "LakehouseProtocol",
     "LocalLakehouse",
+    "OutputFrame",
+    "WriteMode",
+    "logger",
+    "set_log_level",
+    "load_environment",
     "read_table",
     "write_table",
 ]
