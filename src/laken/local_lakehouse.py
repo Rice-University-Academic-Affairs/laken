@@ -10,7 +10,7 @@ from deltalake import DeltaTable, write_deltalake
 
 from laken._env import load_environment
 from laken.frames import from_arrow, to_arrow
-from laken.log import module_logger
+from laken.logger import logger
 from laken.onelake_fetcher import default_fabric_fetcher
 from laken.table_names import (
     format_fabric_table_name,
@@ -29,8 +29,6 @@ from laken.workspace import (
     mirror_limit_bytes,
     utc_timestamp,
 )
-
-logger = module_logger(__name__)
 
 
 def _format_bytes(size_bytes: int) -> str:

@@ -12,7 +12,6 @@ from laken.deploy.fabric_client import publish_wheel
 from laken.deploy.project import ProjectMetadata, read_project_metadata
 from laken.deploy.wheel import resolve_wheel
 from laken.local_lakehouse import LocalLakehouse
-from laken.log import configure_logging
 
 load_environment()
 
@@ -34,7 +33,6 @@ def deploy(
 @app.command()
 def status() -> None:
     def run() -> None:
-        configure_logging()
         rows = LocalLakehouse().status()
         _print_status(rows)
 
@@ -44,7 +42,6 @@ def status() -> None:
 @app.command()
 def refresh(table: str) -> None:
     def run() -> None:
-        configure_logging()
         LocalLakehouse().refresh_table(table)
 
     _exit_on_error(run)
@@ -53,7 +50,6 @@ def refresh(table: str) -> None:
 @app.command()
 def reset(table: str) -> None:
     def run() -> None:
-        configure_logging()
         LocalLakehouse().reset_table(table)
 
     _exit_on_error(run)

@@ -3,15 +3,12 @@ import polars as pl
 import pyarrow as pa
 from pyarrow import Table as ArrowTable
 
-from laken.log import module_logger
 from laken.spark_runtime import (
     get_or_create_spark_session,
     spark_dataframe_type,
     spark_import_error,
 )
 from laken.types import DataFrameTypeName, InputFrame, OutputFrame
-
-logger = module_logger(__name__)
 
 
 def dataframe_kind(df: InputFrame) -> DataFrameTypeName:

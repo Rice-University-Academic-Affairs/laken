@@ -9,12 +9,10 @@ import polars as pl
 from laken._env import load_environment
 from laken.lakehouse_protocol import LakehouseProtocol
 from laken.local_lakehouse import LocalLakehouse
-from laken.log import module_logger
+from laken.logger import logger
 from laken.spark_runtime import SparkDataFrame
 from laken.types import DataFrameTypeName, InputFrame, OutputFrame, WriteMode
 from laken.workspace import DEFAULT_MAX_MIRROR_MB, DEFAULT_MAX_SAMPLE_ROWS, FabricTableFetcher
-
-_log = module_logger(__name__)
 
 
 def _is_fabric_context() -> bool:
@@ -62,7 +60,7 @@ class Lakehouse:
                 workspace_id=workspace_id,
                 workspace_name=workspace_name,
             )
-            _log.debug(
+            logger.debug(
                 "Fabric runtime context; using FabricLakehouse (lakehouse=%s)",
                 lakehouse,
             )
@@ -77,7 +75,7 @@ class Lakehouse:
                 max_mirror_mb=max_mirror_mb,
                 max_sample_rows=max_sample_rows,
             )
-            _log.debug("Local mode; using LocalLakehouse at %s", root)
+            logger.debug("Local mode; using LocalLakehouse at %s", root)
 
     @overload
     def read_table(

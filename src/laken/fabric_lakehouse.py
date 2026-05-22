@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from laken.frames import from_spark, to_spark
-from laken.log import module_logger
+from laken.logger import logger
 from laken.spark_runtime import get_or_create_spark_session
 from laken.table_names import (
     format_fabric_table_name,
@@ -11,8 +11,6 @@ from laken.table_names import (
     resolve_spark_table_name,
 )
 from laken.types import DataFrameTypeName, InputFrame, OutputFrame, WriteMode
-
-logger = module_logger(__name__)
 
 
 def _fabric_constants():
