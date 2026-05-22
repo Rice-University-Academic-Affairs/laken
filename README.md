@@ -61,6 +61,7 @@ FABRIC_WORKSPACE_NAME=MyWorkspace
 FABRIC_LAKEHOUSE_NAME=MyLakehouse
 FABRIC_WORKSPACE_ID=...
 FABRIC_LAKEHOUSE_ID=...
+FABRIC_ENVIRONMENT_ID=...
 ```
 
 ```python
@@ -256,12 +257,19 @@ Azure service principal.
 ```python
 import notebookutils
 
-ctx = notebookutils.runtime.context
-print(ctx.get("currentWorkspaceName"))
-print(ctx.get("currentWorkspaceId"))
-print(ctx.get("defaultLakehouseName"))
-print(ctx.get("defaultLakehouseId"))
-print(ctx.get("environmentId"))
+context = notebookutils.runtime.context
+
+FABRIC_WORKSPACE_NAME = context['currentWorkspaceName']
+FABRIC_LAKEHOUSE_NAME = context.get('defaultLakehouseName')
+FABRIC_WORKSPACE_ID = context['currentWorkspaceId']
+FABRIC_LAKEHOUSE_ID = context.get('defaultLakehouseId')
+FABRIC_ENVIRONMENT_ID = context.get('environmentId')
+
+print(f"FABRIC_WORKSPACE_NAME={FABRIC_WORKSPACE_NAME}")
+print(f"FABRIC_LAKEHOUSE_NAME={FABRIC_LAKEHOUSE_NAME}")
+print(f"FABRIC_WORKSPACE_ID={FABRIC_WORKSPACE_ID}")
+print(f"FABRIC_LAKEHOUSE_ID={FABRIC_LAKEHOUSE_ID}")
+print(f"FABRIC_ENVIRONMENT_ID={FABRIC_ENVIRONMENT_ID}")
 ```
 
 Deploy expects `pyproject.toml` at the repo root, a buildable application wheel, and a
