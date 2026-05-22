@@ -32,6 +32,21 @@ def test_default_fabric_fetcher_with_credentials_returns_fetcher(monkeypatch):
     assert fetcher._lakehouse_id == "lh-id"
 
 
+def test_default_fabric_fetcher_uses_lakehouse_id_argument(monkeypatch):
+    monkeypatch.setenv("AZURE_TENANT_ID", "tenant")
+    monkeypatch.setenv("AZURE_CLIENT_ID", "client")
+    monkeypatch.setenv("AZURE_CLIENT_SECRET", "secret")
+    monkeypatch.delenv("FABRIC_LAKEHOUSE_ID", raising=False)
+    monkeypatch.setenv("FABRIC_WORKSPACE_NAME", "MyWorkspace")
+    monkeypatch.setenv("FABRIC_LAKEHOUSE_NAME", "Sales_LH")
+    monkeypatch.setenv("FABRIC_WORKSPACE_ID", "ws-id")
+
+    fetcher = default_fabric_fetcher(lakehouse_id="ctor-lh-id")
+
+    assert fetcher is not None
+    assert fetcher._lakehouse_id == "ctor-lh-id"
+
+
 def test_default_fabric_fetcher_missing_lakehouse_id_returns_none(monkeypatch):
     monkeypatch.setenv("AZURE_TENANT_ID", "tenant")
     monkeypatch.setenv("AZURE_CLIENT_ID", "client")

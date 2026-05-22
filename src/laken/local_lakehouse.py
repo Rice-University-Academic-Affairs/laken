@@ -421,6 +421,7 @@ class LocalLakehouse:
         logger.debug("Resolving Fabric fetcher from environment")
         self._fabric_fetcher = default_fabric_fetcher(
             lakehouse=self._lakehouse,
+            lakehouse_id=self._lakehouse_id,
             workspace_id=self._workspace_id,
             workspace_name=self._workspace_name,
         )

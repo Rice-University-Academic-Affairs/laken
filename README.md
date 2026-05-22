@@ -258,10 +258,10 @@ Root `.env` is loaded when you construct `Lakehouse` or `LocalLakehouse`, or run
 | `AZURE_TENANT_ID` | Auth (fetch + deploy) |
 | `AZURE_CLIENT_ID` | Auth (fetch + deploy) |
 | `AZURE_CLIENT_SECRET` | Auth (fetch + deploy) |
-| `FABRIC_WORKSPACE_NAME` | Local table fetch |
-| `FABRIC_LAKEHOUSE_NAME` | Local table fetch |
+| `FABRIC_WORKSPACE_NAME` | Local Fabric fetch (all four name/ID vars required) |
+| `FABRIC_LAKEHOUSE_NAME` | Local Fabric fetch |
 | `FABRIC_WORKSPACE_ID` | OneLake paths; required for deploy |
-| `FABRIC_LAKEHOUSE_ID` | OneLake paths |
+| `FABRIC_LAKEHOUSE_ID` | OneLake paths; required for local Fabric fetch |
 | `FABRIC_ENVIRONMENT_ID` | Deploy target |
 
 `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, and `AZURE_CLIENT_SECRET` are credentials from an

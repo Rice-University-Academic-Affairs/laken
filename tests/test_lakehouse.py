@@ -112,6 +112,7 @@ class TestLakehouseDispatch:
 
         mock_default.assert_called_once_with(
             lakehouse="Sales_LH",
+            lakehouse_id="lh-id",
             workspace_id="ws-id",
             workspace_name="MyWorkspace",
         )

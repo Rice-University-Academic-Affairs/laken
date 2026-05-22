@@ -111,6 +111,7 @@ class OneLakeFabricFetcher:
 def default_fabric_fetcher(
     *,
     lakehouse: str | None = None,
+    lakehouse_id: str | None = None,
     workspace_id: str | None = None,
     workspace_name: str | None = None,
 ) -> OneLakeFabricFetcher | None:
@@ -119,7 +120,7 @@ def default_fabric_fetcher(
     resolved_workspace_name = workspace_name or os.getenv("FABRIC_WORKSPACE_NAME")
     resolved_lakehouse = lakehouse or os.getenv("FABRIC_LAKEHOUSE_NAME")
     resolved_workspace_id = workspace_id or os.getenv("FABRIC_WORKSPACE_ID")
-    resolved_lakehouse_id = os.getenv("FABRIC_LAKEHOUSE_ID")
+    resolved_lakehouse_id = lakehouse_id or os.getenv("FABRIC_LAKEHOUSE_ID")
     if not (
         resolved_workspace_name
         and resolved_lakehouse

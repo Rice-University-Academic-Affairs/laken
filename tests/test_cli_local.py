@@ -65,6 +65,7 @@ def test_local_lakehouse_resolves_default_fabric_fetcher_lazily(mock_default, tm
     assert lakehouse._resolve_fabric_fetcher() is fetcher
     mock_default.assert_called_once_with(
         lakehouse="Sales_LH",
+        lakehouse_id=None,
         workspace_id=None,
         workspace_name=None,
     )
