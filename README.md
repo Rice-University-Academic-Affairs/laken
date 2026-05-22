@@ -232,10 +232,10 @@ must have come from Fabric originally.
 
 ### Environment variables
 
-Root `.env` is not loaded on `import laken`. Call `load_environment()` from `laken` when
-you want dotenv in notebooks or scripts, or rely on the `laken` CLI (which loads it at
-startup). Shell and CI variables take precedence. Set `PYTHON_DOTENV_DISABLED=1` to skip
-loading.
+Root `.env` is loaded when you construct `Lakehouse` or `LocalLakehouse`, or run the
+`laken` CLI. Plain `import laken` does not load it. Shell and CI variables take precedence
+over `.env` values. Call `load_environment()` yourself only if you need env vars before
+creating a lakehouse instance.
 
 | Variable | Purpose |
 | :--- | :--- |

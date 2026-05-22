@@ -1,21 +1,20 @@
-import logging
-
 import pandas as pd
 import polars as pl
 import pyarrow as pa
 from pyarrow import Table as ArrowTable
 
+from laken.log import module_logger
 from laken.spark_runtime import (
     get_or_create_spark_session,
     spark_dataframe_type,
     spark_import_error,
 )
-from laken.types import DfKind, InputFrame, OutputFrame
+from laken.types import DataFrameTypeName, InputFrame, OutputFrame
 
-logger = logging.getLogger(__name__)
+logger = module_logger(__name__)
 
 
-def dataframe_kind(df: InputFrame) -> DfKind:
+def dataframe_kind(df: InputFrame) -> DataFrameTypeName:
     if isinstance(df, pd.DataFrame):
         return "pandas"
     if isinstance(df, pl.DataFrame):
@@ -41,7 +40,7 @@ def to_arrow(df: InputFrame) -> ArrowTable:
 
 def from_arrow(
     table: ArrowTable,
-    frame_type: DfKind,
+    frame_type: DataFrameTypeName,
     spark=None,
 ) -> OutputFrame:
     if frame_type == "pandas":
@@ -65,7 +64,7 @@ def to_spark(df: InputFrame, spark) -> OutputFrame:
     return spark.createDataFrame(df.to_pandas())
 
 
-def from_spark(spark_df, frame_type: DfKind) -> OutputFrame:
+def from_spark(spark_df, frame_type: DataFrameTypeName) -> OutputFrame:
     if frame_type == "spark":
         return spark_df
     if frame_type == "pandas":

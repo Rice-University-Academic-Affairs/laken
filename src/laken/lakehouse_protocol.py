@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from laken.types import DfKind, InputFrame, OutputFrame, WriteMode
+from laken.types import DataFrameTypeName, InputFrame, OutputFrame, WriteMode
 
 
 @runtime_checkable
@@ -11,7 +11,7 @@ class LakehouseProtocol(Protocol):
         self,
         name: str,
         *,
-        frame_type: DfKind | None = None,
+        frame_type: DataFrameTypeName | None = None,
         max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
     ) -> OutputFrame: ...
@@ -23,7 +23,7 @@ class LakehouseProtocol(Protocol):
         *,
         schema: str | None = "dbo",
         workspace_id: str | None = None,
-        frame_type: DfKind | None = None,
+        frame_type: DataFrameTypeName | None = None,
     ) -> OutputFrame: ...
 
     def write_table(self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite") -> None: ...
@@ -34,7 +34,9 @@ class LakehouseProtocol(Protocol):
 
     def drop_table(self, name: str) -> None: ...
 
-    def read_file(self, path: str, *, frame_type: DfKind | None = None) -> OutputFrame: ...
+    def read_file(
+        self, path: str, *, frame_type: DataFrameTypeName | None = None
+    ) -> OutputFrame: ...
 
     def write_file(self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite") -> None: ...
 

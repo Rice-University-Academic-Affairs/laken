@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from laken.frames import from_spark, to_spark
+from laken.log import module_logger
 from laken.spark_runtime import get_or_create_spark_session
 from laken.table_names import (
     format_fabric_table_name,
@@ -9,7 +10,9 @@ from laken.table_names import (
     parse_table_name,
     resolve_spark_table_name,
 )
-from laken.types import DfKind, InputFrame, OutputFrame, WriteMode
+from laken.types import DataFrameTypeName, InputFrame, OutputFrame, WriteMode
+
+logger = module_logger(__name__)
 
 
 def _fabric_constants():
@@ -32,6 +35,11 @@ class FabricLakehouse:
         self._lakehouse = lakehouse or ctx.get("defaultLakehouseName")
         self._workspace_id = workspace_id or ctx.get("currentWorkspaceId")
         self._workspace_name = workspace_name or ctx.get("currentWorkspaceName")
+        logger.debug(
+            "FabricLakehouse ready (lakehouse=%s, workspace=%s)",
+            self._lakehouse,
+            self._workspace_name,
+        )
 
     def _spark(self):
         return get_or_create_spark_session()
@@ -90,12 +98,14 @@ class FabricLakehouse:
         self,
         name: str,
         *,
-        frame_type: DfKind = "spark",
+        frame_type: DataFrameTypeName = "spark",
         max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
     ) -> OutputFrame:
+        resolved = self._resolve_table_name(name)
+        logger.debug("Reading %s from Fabric table %s", name, resolved)
         spark = self._spark()
-        spark_df = spark.read.table(self._resolve_table_name(name))
+        spark_df = spark.read.table(resolved)
         return from_spark(spark_df, frame_type)
 
     def load_table_from_warehouse(
@@ -105,8 +115,10 @@ class FabricLakehouse:
         *,
         schema: str | None = "dbo",
         workspace_id: str | None = None,
-        frame_type: DfKind = "spark",
+        frame_type: DataFrameTypeName = "spark",
     ) -> OutputFrame:
+        warehouse_table = self._resolve_warehouse_table_name(table_name, warehouse_name, schema)
+        logger.debug("Loading warehouse table %s via synapsesql", warehouse_table)
         constants = _fabric_constants()
         spark_df = (
             self._spark()
@@ -114,7 +126,7 @@ class FabricLakehouse:
                 constants.WorkspaceId,
                 self._resolve_warehouse_workspace_id(workspace_id),
             )
-            .synapsesql(self._resolve_warehouse_table_name(table_name, warehouse_name, schema))
+            .synapsesql(warehouse_table)
         )
         return from_spark(spark_df, frame_type)
 
@@ -148,9 +160,11 @@ class FabricLakehouse:
         spark = self._spark()
         spark.catalog.dropTable(self._resolve_table_name(name), ignoreIfNotExists=True)
 
-    def read_file(self, path: str, *, frame_type: DfKind = "spark") -> OutputFrame:
+    def read_file(self, path: str, *, frame_type: DataFrameTypeName = "spark") -> OutputFrame:
+        resolved_path = self._file_path(path)
+        logger.debug("Reading Fabric file %s", resolved_path)
         spark = self._spark()
-        spark_df = spark.read.parquet(self._file_path(path))
+        spark_df = spark.read.parquet(resolved_path)
         return from_spark(spark_df, frame_type)
 
     def write_file(self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite") -> None:

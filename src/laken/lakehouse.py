@@ -6,11 +6,15 @@ from typing import Literal, overload
 import pandas as pd
 import polars as pl
 
+from laken._env import load_environment
 from laken.lakehouse_protocol import LakehouseProtocol
 from laken.local_lakehouse import LocalLakehouse
+from laken.log import module_logger
 from laken.spark_runtime import SparkDataFrame
-from laken.types import DfKind, InputFrame, OutputFrame, WriteMode
+from laken.types import DataFrameTypeName, InputFrame, OutputFrame, WriteMode
 from laken.workspace import DEFAULT_MAX_MIRROR_MB, DEFAULT_MAX_SAMPLE_ROWS, FabricTableFetcher
+
+_log = module_logger(__name__)
 
 
 def _is_fabric_context() -> bool:
@@ -28,7 +32,7 @@ def _is_fabric_context() -> bool:
     return bool(get("currentWorkspaceId") or get("currentWorkspaceName"))
 
 
-def _default_df_kind(implementation: LakehouseProtocol) -> DfKind:
+def _default_frame_type(implementation: LakehouseProtocol) -> DataFrameTypeName:
     from laken.fabric_lakehouse import FabricLakehouse
 
     if isinstance(implementation, FabricLakehouse):
@@ -49,6 +53,7 @@ class Lakehouse:
         max_mirror_mb: int = DEFAULT_MAX_MIRROR_MB,
         max_sample_rows: int = DEFAULT_MAX_SAMPLE_ROWS,
     ):
+        load_environment()
         if _is_fabric_context():
             from laken.fabric_lakehouse import FabricLakehouse
 
@@ -56,6 +61,10 @@ class Lakehouse:
                 lakehouse=lakehouse,
                 workspace_id=workspace_id,
                 workspace_name=workspace_name,
+            )
+            _log.debug(
+                "Fabric runtime context; using FabricLakehouse (lakehouse=%s)",
+                lakehouse,
             )
         else:
             self._implementation = LocalLakehouse(
@@ -68,6 +77,7 @@ class Lakehouse:
                 max_mirror_mb=max_mirror_mb,
                 max_sample_rows=max_sample_rows,
             )
+            _log.debug("Local mode; using LocalLakehouse at %s", root)
 
     @overload
     def read_table(
@@ -103,11 +113,11 @@ class Lakehouse:
         self,
         name: str,
         *,
-        frame_type: DfKind | None = None,
+        frame_type: DataFrameTypeName | None = None,
         max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
     ) -> OutputFrame:
-        kind = _default_df_kind(self._implementation) if frame_type is None else frame_type
+        kind = _default_frame_type(self._implementation) if frame_type is None else frame_type
         return self._implementation.read_table(
             name,
             frame_type=kind,
@@ -155,9 +165,9 @@ class Lakehouse:
         *,
         schema: str | None = "dbo",
         workspace_id: str | None = None,
-        frame_type: DfKind | None = None,
+        frame_type: DataFrameTypeName | None = None,
     ) -> OutputFrame:
-        kind = _default_df_kind(self._implementation) if frame_type is None else frame_type
+        kind = _default_frame_type(self._implementation) if frame_type is None else frame_type
         return self._implementation.load_table_from_warehouse(
             table_name,
             warehouse_name,
@@ -187,8 +197,8 @@ class Lakehouse:
     @overload
     def read_file(self, path: str, *, frame_type: Literal["polars"]) -> pl.DataFrame: ...
 
-    def read_file(self, path: str, *, frame_type: DfKind | None = None) -> OutputFrame:
-        kind = _default_df_kind(self._implementation) if frame_type is None else frame_type
+    def read_file(self, path: str, *, frame_type: DataFrameTypeName | None = None) -> OutputFrame:
+        kind = _default_frame_type(self._implementation) if frame_type is None else frame_type
         return self._implementation.read_file(path, frame_type=kind)
 
     def write_file(self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite") -> None:

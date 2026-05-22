@@ -3,13 +3,14 @@ from laken.fabric_lakehouse import FabricLakehouse
 from laken.lakehouse import Lakehouse
 from laken.lakehouse_protocol import LakehouseProtocol
 from laken.local_lakehouse import LocalLakehouse
-from laken.types import DfKind, InputFrame, OutputFrame, WriteMode
+from laken.log import configure_logging
+from laken.types import DataFrameTypeName, InputFrame, OutputFrame, WriteMode
 
 
 def read_table(
     name: str,
     *,
-    frame_type: DfKind | None = None,
+    frame_type: DataFrameTypeName | None = None,
     max_mirror_mb: int | None = None,
     max_sample_rows: int | None = None,
 ) -> OutputFrame:
@@ -26,7 +27,7 @@ def write_table(df: InputFrame, name: str, *, mode: WriteMode = "overwrite") -> 
 
 
 __all__ = [
-    "DfKind",
+    "DataFrameTypeName",
     "FabricLakehouse",
     "InputFrame",
     "Lakehouse",
@@ -34,6 +35,7 @@ __all__ = [
     "LocalLakehouse",
     "OutputFrame",
     "WriteMode",
+    "configure_logging",
     "load_environment",
     "read_table",
     "write_table",

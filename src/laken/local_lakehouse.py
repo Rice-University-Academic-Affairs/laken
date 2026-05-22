@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import os
 import shutil
 from pathlib import Path
@@ -9,7 +8,9 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from deltalake import DeltaTable, write_deltalake
 
+from laken._env import load_environment
 from laken.frames import from_arrow, to_arrow
+from laken.log import module_logger
 from laken.onelake_fetcher import default_fabric_fetcher
 from laken.table_names import (
     format_fabric_table_name,
@@ -17,7 +18,7 @@ from laken.table_names import (
     is_four_part_table_name,
     parse_table_name,
 )
-from laken.types import DfKind, InputFrame, OutputFrame, WriteMode
+from laken.types import DataFrameTypeName, InputFrame, OutputFrame, WriteMode
 from laken.workspace import (
     DEFAULT_MAX_MIRROR_MB,
     DEFAULT_MAX_SAMPLE_ROWS,
@@ -29,7 +30,7 @@ from laken.workspace import (
     utc_timestamp,
 )
 
-logger = logging.getLogger(__name__)
+logger = module_logger(__name__)
 
 
 def _format_bytes(size_bytes: int) -> str:
@@ -53,6 +54,7 @@ class LocalLakehouse:
         max_mirror_mb: int = DEFAULT_MAX_MIRROR_MB,
         max_sample_rows: int = DEFAULT_MAX_SAMPLE_ROWS,
     ):
+        load_environment()
         self._root = Path(root).resolve()
         self._lakehouse = lakehouse or os.getenv("FABRIC_LAKEHOUSE_NAME")
         self._workspace_id = workspace_id or os.getenv("FABRIC_WORKSPACE_ID")
@@ -67,10 +69,17 @@ class LocalLakehouse:
         )
         (self._root / "Files").mkdir(parents=True, exist_ok=True)
         (self._root / "Tables").mkdir(parents=True, exist_ok=True)
+        logger.debug(
+            "LocalLakehouse ready at %s (lakehouse=%s, workspace=%s)",
+            self._root,
+            self._lakehouse,
+            self._workspace_name,
+        )
 
     def _resolve_fabric_fetcher(self) -> FabricTableFetcher | None:
         if self._fabric_fetcher_resolved:
             return self._fabric_fetcher
+        logger.debug("Resolving Fabric fetcher from environment")
         self._fabric_fetcher = default_fabric_fetcher(
             lakehouse=self._lakehouse,
             workspace_id=self._workspace_id,
@@ -222,9 +231,11 @@ class LocalLakehouse:
             max_mirror_mb=max_mirror_mb,
             max_sample_rows=max_sample_rows,
         )
+        fetch_name = self._resolve_fetch_name(name)
+        logger.debug("Hydrating %s from Fabric (%s)", name, fetch_name)
         self._fetch_and_cache(
             name,
-            self._resolve_fetch_name(name),
+            fetch_name,
             max_mirror_mb=cache_mb,
             max_sample_rows=cache_rows,
         )
@@ -332,17 +343,23 @@ class LocalLakehouse:
         self,
         name: str,
         *,
-        frame_type: DfKind = "pandas",
+        frame_type: DataFrameTypeName = "pandas",
         max_mirror_mb: int | None = None,
         max_sample_rows: int | None = None,
     ) -> OutputFrame:
         table_dir = self._table_dir(name)
         if not (table_dir / "_delta_log").is_dir():
+            logger.debug("No local Delta cache for %s", name)
             self._hydrate_table(
                 name,
                 max_mirror_mb=max_mirror_mb,
                 max_sample_rows=max_sample_rows,
             )
+        else:
+            key = self._table_key(name)
+            entry = self._metadata.table(key)
+            state = entry.get("state", "local") if entry is not None else "local"
+            logger.debug("Reading %s from local Delta cache (state=%s)", name, state)
         self._warn_about_cached_table(name)
         return from_arrow(DeltaTable(str(table_dir)).to_pyarrow_table(), frame_type)
 
@@ -353,7 +370,7 @@ class LocalLakehouse:
         *,
         schema: str | None = "dbo",
         workspace_id: str | None = None,
-        frame_type: DfKind = "pandas",
+        frame_type: DataFrameTypeName = "pandas",
     ) -> OutputFrame:
         _ = warehouse_name, schema, workspace_id
         return self.read_file(table_name, frame_type=frame_type)
@@ -415,10 +432,11 @@ class LocalLakehouse:
         shutil.rmtree(self._table_dir(name), ignore_errors=True)
         self._metadata.remove(self._table_key(name))
 
-    def read_file(self, path: str, *, frame_type: DfKind = "pandas") -> OutputFrame:
+    def read_file(self, path: str, *, frame_type: DataFrameTypeName = "pandas") -> OutputFrame:
         file_path = self._file_path(path)
         if not file_path.is_file():
             raise FileNotFoundError(f"file not found: {path}")
+        logger.debug("Reading local file %s", path)
         return from_arrow(pq.read_table(file_path), frame_type)
 
     def write_file(self, df: InputFrame, path: str, *, mode: WriteMode = "overwrite") -> None:

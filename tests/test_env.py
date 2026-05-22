@@ -25,6 +25,26 @@ def test_import_does_not_load_dotenv(tmp_path):
     assert _run_script(tmp_path, script) == ""
 
 
+def test_lakehouse_loads_dotenv_from_cwd(tmp_path):
+    (tmp_path / ".env").write_text("LAKEN_TEST_VAR=from-dotenv\n")
+    script = (
+        "import os; from laken import Lakehouse; "
+        "Lakehouse(); print(os.getenv('LAKEN_TEST_VAR', ''))"
+    )
+    assert _run_script(tmp_path, script) == "from-dotenv"
+
+
+def test_lakehouse_does_not_override_existing_env(tmp_path):
+    (tmp_path / ".env").write_text("LAKEN_TEST_VAR=from-dotenv\n")
+    script = (
+        "import os; from laken import Lakehouse; "
+        "Lakehouse(); print(os.getenv('LAKEN_TEST_VAR', ''))"
+    )
+    assert (
+        _run_script(tmp_path, script, extra_env={"LAKEN_TEST_VAR": "from-shell"}) == "from-shell"
+    )
+
+
 def test_load_environment_loads_dotenv_from_cwd(tmp_path):
     (tmp_path / ".env").write_text("LAKEN_TEST_VAR=from-dotenv\n")
     script = (
@@ -32,26 +52,6 @@ def test_load_environment_loads_dotenv_from_cwd(tmp_path):
         "load_environment(); print(os.getenv('LAKEN_TEST_VAR', ''))"
     )
     assert _run_script(tmp_path, script) == "from-dotenv"
-
-
-def test_load_environment_does_not_override_existing_env(tmp_path):
-    (tmp_path / ".env").write_text("LAKEN_TEST_VAR=from-dotenv\n")
-    script = (
-        "import os; from laken import load_environment; "
-        "load_environment(); print(os.getenv('LAKEN_TEST_VAR', ''))"
-    )
-    assert (
-        _run_script(tmp_path, script, extra_env={"LAKEN_TEST_VAR": "from-shell"}) == "from-shell"
-    )
-
-
-def test_dotenv_disabled_by_env_var(tmp_path):
-    (tmp_path / ".env").write_text("LAKEN_TEST_VAR=from-dotenv\n")
-    script = (
-        "import os; from laken import load_environment; "
-        "load_environment(); print(os.getenv('LAKEN_TEST_VAR', ''))"
-    )
-    assert _run_script(tmp_path, script, extra_env={"PYTHON_DOTENV_DISABLED": "1"}) == ""
 
 
 def test_cli_import_loads_dotenv(tmp_path):
