@@ -15,29 +15,6 @@ from laken.types import DataFrameTypeName, InputFrame, OutputFrame, WriteMode
 from laken.workspace import DEFAULT_MAX_MIRROR_MB, DEFAULT_MAX_SAMPLE_ROWS, FabricTableFetcher
 
 
-def _is_fabric_context() -> bool:
-    try:
-        import notebookutils
-    except ImportError:
-        return False
-    try:
-        context = notebookutils.runtime.context
-    except Exception:
-        return False
-    get = getattr(context, "get", None)
-    if not callable(get):
-        return False
-    return bool(get("currentWorkspaceId") or get("currentWorkspaceName"))
-
-
-def _default_frame_type(implementation: LakehouseProtocol) -> DataFrameTypeName:
-    from laken.fabric_lakehouse import FabricLakehouse
-
-    if isinstance(implementation, FabricLakehouse):
-        return "spark"
-    return "pandas"
-
-
 class Lakehouse:
     def __init__(
         self,
@@ -210,3 +187,26 @@ class Lakehouse:
 
     def delete_file(self, path: str) -> None:
         return self._implementation.delete_file(path)
+
+
+def _is_fabric_context() -> bool:
+    try:
+        import notebookutils
+    except ImportError:
+        return False
+    try:
+        context = notebookutils.runtime.context
+    except Exception:
+        return False
+    get = getattr(context, "get", None)
+    if not callable(get):
+        return False
+    return bool(get("currentWorkspaceId") or get("currentWorkspaceName"))
+
+
+def _default_frame_type(implementation: LakehouseProtocol) -> DataFrameTypeName:
+    from laken.fabric_lakehouse import FabricLakehouse
+
+    if isinstance(implementation, FabricLakehouse):
+        return "spark"
+    return "pandas"

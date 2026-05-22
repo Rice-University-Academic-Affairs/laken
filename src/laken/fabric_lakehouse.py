@@ -13,13 +13,6 @@ from laken.table_names import (
 from laken.types import DataFrameTypeName, InputFrame, OutputFrame, WriteMode
 
 
-def _fabric_constants():
-    __import__("com.microsoft.spark.fabric")
-    from com.microsoft.spark.fabric.Constants import Constants
-
-    return Constants
-
-
 class FabricLakehouse:
     def __init__(
         self,
@@ -38,59 +31,6 @@ class FabricLakehouse:
             self._lakehouse,
             self._workspace_name,
         )
-
-    def _spark(self):
-        return get_or_create_spark_session()
-
-    def _notebookutils(self):
-        import notebookutils
-
-        return notebookutils
-
-    def _require_cross_lakehouse_context(self) -> None:
-        missing = []
-        if not self._lakehouse:
-            missing.append("lakehouse")
-        if not self._workspace_id:
-            missing.append("workspace_id")
-        if not self._workspace_name:
-            missing.append("workspace_name")
-        if missing:
-            raise ValueError(f"cross-lakehouse operations require: {', '.join(missing)}")
-
-    def _abfss_root(self) -> str:
-        self._require_cross_lakehouse_context()
-        return (
-            f"abfss://{self._workspace_name}@onelake.dfs.fabric.microsoft.com/"
-            f"{self._lakehouse}.Lakehouse/"
-        )
-
-    def _resolve_table_name(self, name: str) -> str:
-        stripped = name.strip()
-        if not self._explicit_lakehouse:
-            return resolve_spark_table_name(stripped)
-        self._require_cross_lakehouse_context()
-        if is_four_part_table_name(stripped):
-            return stripped
-        schema, table = parse_table_name(stripped)
-        return format_fabric_table_name(self._workspace_name, self._lakehouse, schema, table)
-
-    def _resolve_warehouse_workspace_id(self, workspace_id: str | None) -> str:
-        resolved = workspace_id if workspace_id is not None else self._workspace_id
-        if resolved is None:
-            raise ValueError("warehouse reads require: workspace_id")
-        return resolved
-
-    def _resolve_warehouse_table_name(
-        self, table_name: str, warehouse_name: str, schema: str | None
-    ) -> str:
-        return ".".join(part for part in [warehouse_name, schema, table_name] if part)
-
-    def _file_path(self, path: str) -> str:
-        normalized = path.replace("\\", "/").lstrip("/")
-        if not self._explicit_lakehouse:
-            return f"Files/{normalized}" if normalized else "Files"
-        return f"{self._abfss_root()}Files/{normalized}"
 
     def read_table(
         self,
@@ -181,3 +121,63 @@ class FabricLakehouse:
     def delete_file(self, path: str) -> None:
         nu = self._notebookutils()
         nu.fs.rm(self._file_path(path), recurse=False)
+
+    def _resolve_table_name(self, name: str) -> str:
+        stripped = name.strip()
+        if not self._explicit_lakehouse:
+            return resolve_spark_table_name(stripped)
+        self._require_cross_lakehouse_context()
+        if is_four_part_table_name(stripped):
+            return stripped
+        schema, table = parse_table_name(stripped)
+        return format_fabric_table_name(self._workspace_name, self._lakehouse, schema, table)
+
+    def _spark(self):
+        return get_or_create_spark_session()
+
+    def _resolve_warehouse_workspace_id(self, workspace_id: str | None) -> str:
+        resolved = workspace_id if workspace_id is not None else self._workspace_id
+        if resolved is None:
+            raise ValueError("warehouse reads require: workspace_id")
+        return resolved
+
+    def _resolve_warehouse_table_name(
+        self, table_name: str, warehouse_name: str, schema: str | None
+    ) -> str:
+        return ".".join(part for part in [warehouse_name, schema, table_name] if part)
+
+    def _notebookutils(self):
+        import notebookutils
+
+        return notebookutils
+
+    def _file_path(self, path: str) -> str:
+        normalized = path.replace("\\", "/").lstrip("/")
+        if not self._explicit_lakehouse:
+            return f"Files/{normalized}" if normalized else "Files"
+        return f"{self._abfss_root()}Files/{normalized}"
+
+    def _require_cross_lakehouse_context(self) -> None:
+        missing = []
+        if not self._lakehouse:
+            missing.append("lakehouse")
+        if not self._workspace_id:
+            missing.append("workspace_id")
+        if not self._workspace_name:
+            missing.append("workspace_name")
+        if missing:
+            raise ValueError(f"cross-lakehouse operations require: {', '.join(missing)}")
+
+    def _abfss_root(self) -> str:
+        self._require_cross_lakehouse_context()
+        return (
+            f"abfss://{self._workspace_name}@onelake.dfs.fabric.microsoft.com/"
+            f"{self._lakehouse}.Lakehouse/"
+        )
+
+
+def _fabric_constants():
+    __import__("com.microsoft.spark.fabric")
+    from com.microsoft.spark.fabric.Constants import Constants
+
+    return Constants

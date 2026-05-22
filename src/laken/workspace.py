@@ -39,6 +39,22 @@ class TableMetadataStore:
     def path(self) -> Path:
         return self._path
 
+    def table(self, name: str) -> dict | None:
+        return self.load()["tables"].get(name)
+
+    def upsert(self, name: str, entry: dict) -> None:
+        data = self.load()
+        data["tables"][name] = entry
+        self.save(data)
+
+    def remove(self, name: str) -> None:
+        data = self.load()
+        data["tables"].pop(name, None)
+        self.save(data)
+
+    def tables(self) -> dict:
+        return self.load()["tables"]
+
     def load(self) -> dict:
         if not self._path.is_file():
             return {"tables": {}}
@@ -55,22 +71,6 @@ class TableMetadataStore:
             json.dump(data, file, indent=2, sort_keys=True)
             file.write("\n")
         temp_path.replace(self._path)
-
-    def table(self, name: str) -> dict | None:
-        return self.load()["tables"].get(name)
-
-    def upsert(self, name: str, entry: dict) -> None:
-        data = self.load()
-        data["tables"][name] = entry
-        self.save(data)
-
-    def remove(self, name: str) -> None:
-        data = self.load()
-        data["tables"].pop(name, None)
-        self.save(data)
-
-    def tables(self) -> dict:
-        return self.load()["tables"]
 
 
 def utc_timestamp() -> str:
