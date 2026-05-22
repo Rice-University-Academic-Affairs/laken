@@ -221,14 +221,14 @@ Environment, and publishes it so notebooks can import your package.
 `laken status`, `laken refresh`, and `laken reset` manage the local `.laken/` cache on your
 laptop. They do not run inside Fabric notebooks.
 
-`laken status` lists cached tables with state (`mirror`, `sample`, or `local`), the Fabric
-source version when known, and notes such as staleness or sample size.
+`laken status` lists what is in `.laken/` (full copy, row sample, or local-only) and
+whether your cache may be behind Fabric.
 
-`laken refresh <table>` re-downloads a table from Fabric when it was originally cached
-from Fabric. Local-only tables are left unchanged.
+`laken refresh <table>` downloads the table from Fabric again. Local-only tables are
+unchanged.
 
-`laken reset <table>` discards local changes and re-fetches from Fabric. The table must
-have been cached from Fabric first.
+`laken reset <table>` throws away local edits and downloads from Fabric again. The table
+must have come from Fabric originally.
 
 ### Environment variables
 
@@ -275,19 +275,32 @@ Fabric environment with a compatible Python/Spark runtime.
 | `LocalLakehouse` | Laptop / CI | `.laken/workspace/` | Cached Delta and local tables | Local only; not pushed to Fabric |
 | `FabricLakehouse` | Fabric notebook | Attached lakehouse | Spark/Delta on attached lakehouse | Delta tables on attached lakehouse |
 
-First local read of a Fabric table fetches and caches Delta under `.laken/`. Tables up to
-**100 MB** on Fabric (from the Delta transaction log) are mirrored in full; larger tables
-cache up to **10,000 rows** as a development sample. Override on `Lakehouse` construction or
-per `read_table` call:
+### Local Fabric cache
+
+The first time you `read_table` a Fabric-backed name locally, laken downloads it into
+`.laken/` as Delta. Later reads use that copy until you refresh it.
+
+**Defaults**
+
+- Tables **100 MB or smaller** on Fabric (file sizes from the Delta log) are cached in full.
+- Larger tables cache the first **10,000 rows** only, enough for local development without
+  pulling the whole table.
+
+**Change the limits**
 
 ```python
 lh = Lakehouse(max_mirror_mb=200, max_sample_rows=5_000)
 lh.read_table("dbo.big_fact", max_mirror_mb=500)
 ```
 
-Per-read overrides apply only on the first hydrate; refresh and reset use the instance
-defaults. If Fabric changes, `laken` warns and keeps the cache until you run
-`laken refresh <table>`.
+`max_mirror_mb` and `max_sample_rows` on `Lakehouse(...)` apply to `laken refresh` and
+`laken reset`. If you pass them to `read_table` instead, they apply only the first time that
+table is downloaded; after that, reads use the cached copy.
+
+**When Fabric changes**
+
+If someone updates the table in Fabric after you cached it, laken prints a warning and
+keeps using your local copy. Run `laken refresh <table>` to pull the latest version.
 
 ---
 
