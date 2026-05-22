@@ -4,10 +4,6 @@
 
 **The missing local development workflow for Microsoft Fabric.**
 
-[![Python](https://img.shields.io/badge/python-3.11+-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
-[![PyPI](https://img.shields.io/pypi/v/laken.svg)](https://pypi.org/project/laken/)
-[![Microsoft Fabric](https://img.shields.io/badge/Microsoft-Fabric-0078D4?logo=microsoft&logoColor=white)](https://www.microsoft.com/microsoft-fabric)
-
 </div>
 
 **laken** lets you develop Python code for Fabric locally, using the tools you already trust.
