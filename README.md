@@ -41,6 +41,67 @@ wheel before publishing to a Fabric environment.
 
 ---
 
+## Quickstart
+
+Point laken at your Fabric lakehouse, read real tables on your laptop, and ship the same
+code back to Fabric.
+
+**1. Credentials** — create a `.env` in your project root (see
+[Environment variables](#environment-variables) for the full list):
+
+```env
+AZURE_TENANT_ID=...
+AZURE_CLIENT_ID=...
+AZURE_CLIENT_SECRET=...
+FABRIC_WORKSPACE_NAME=MyWorkspace
+FABRIC_LAKEHOUSE_NAME=MyLakehouse
+FABRIC_WORKSPACE_ID=...
+FABRIC_LAKEHOUSE_ID=...
+```
+
+**2. Read and write locally** — the first read pulls from OneLake into `.laken/`; later
+reads use the cache. Writes stay local until you run in Fabric:
+
+```python
+from laken import Lakehouse
+
+lh = Lakehouse()
+products = lh.read_table("marketing.products", frame_type="pandas")
+
+summary = products.groupby("category", as_index=False)["amount"].sum()
+lh.write_table(summary, "staging.product_summary")
+```
+
+**3. Run in Fabric** — paste the same pipeline into a notebook; `Lakehouse()` attaches to
+your lakehouse and writes persist:
+
+```python
+from laken import Lakehouse
+from myapp.pipeline import run_pipeline
+
+lh = Lakehouse()
+run_pipeline(lh)
+```
+
+**4. Deploy your package** — from the project root, with `FABRIC_ENVIRONMENT_ID` in
+`.env`:
+
+```bash
+laken deploy
+```
+
+**5. Cache on your machine** — see what landed locally and refresh when Fabric moves:
+
+```bash
+laken status
+laken refresh marketing.products
+```
+
+Tables under 100 MB mirror in full; larger tables cache the first 10,000 rows. Details:
+[Local Fabric cache](#local-fabric-cache).
+
+---
+
 ## Develop against your Fabric lakehouse
 
 Set your credentials, select your workspace and lakehouse in a `.env` file at your
