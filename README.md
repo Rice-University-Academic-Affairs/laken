@@ -43,8 +43,8 @@ wheel before publishing to a Fabric environment.
 
 ## Quickstart
 
-Summarize a Fabric table on your laptop, deploy that code as a package, and run it in a
-notebook — same function throughout.
+Write lakehouse code on your laptop against real Fabric data, package it, and run the
+same code in a notebook.
 
 **1. Credentials** — create a `.env` in your project root (see
 [Environment variables](#environment-variables) for the full list):
@@ -59,46 +59,51 @@ FABRIC_WORKSPACE_ID=...
 FABRIC_LAKEHOUSE_ID=...
 ```
 
-**2. Write and run your pipeline** — put the logic in your project (for example
-`src/myapp/pipeline.py`):
+**2. Develop locally** — write your logic against real tables. On your laptop the first
+read pulls from Fabric into `.laken/`; in a notebook the same code runs against your
+attached lakehouse:
 
 ```python
 from laken import Lakehouse
-
-
-def summarize_products(lh: Lakehouse) -> None:
-    products = lh.read_table("marketing.products", frame_type="pandas")
-    summary = products.groupby("category", as_index=False)["amount"].sum()
-    lh.write_table(summary, "staging.product_summary")
-```
-
-On your laptop, `Lakehouse()` caches reads under `.laken/` and keeps writes local. In a
-Fabric notebook, the same call uses your attached lakehouse and writes persist:
-
-```python
-from laken import Lakehouse
-from myapp.pipeline import summarize_products
 
 lh = Lakehouse()
-summarize_products(lh)
+df = lh.read_table("schema.table", frame_type="pandas")
+# ...
+lh.write_table(df, "schema.out_table")
 ```
 
-**3. Deploy your package** — add `FABRIC_ENVIRONMENT_ID` to `.env`, then from the project
-root (with `pyproject.toml` and `src/myapp/`):
+**3. Package and deploy** — move that code into a normal Python package and publish it to
+a Fabric Environment (`FABRIC_ENVIRONMENT_ID` in `.env`):
+
+```
+myapp/
+├── pyproject.toml
+└── src/myapp/
+    └── pipeline.py
+```
+
+```python
+# src/myapp/pipeline.py
+from laken import Lakehouse
+
+def run(lh: Lakehouse) -> None:
+    df = lh.read_table("schema.table", frame_type="pandas")
+    # ...
+    lh.write_table(df, "schema.out_table")
+```
 
 ```bash
 laken deploy
 ```
 
-**4. Run it in Fabric** — after the environment publish finishes, import your package in
-a notebook:
+**4. Run in a notebook** — after the environment publish finishes:
 
 ```python
 from laken import Lakehouse
-from myapp.pipeline import summarize_products
+from myapp.pipeline import run
 
 lh = Lakehouse()
-summarize_products(lh)
+run(lh)
 ```
 
 ---
