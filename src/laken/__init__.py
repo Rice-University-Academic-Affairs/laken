@@ -3,7 +3,7 @@ from laken.fabric_lakehouse import FabricLakehouse
 from laken.lakehouse import Lakehouse
 from laken.lakehouse_protocol import LakehouseProtocol
 from laken.local_lakehouse import LocalLakehouse
-from laken.logger import logger, set_log_level
+from laken.logger import DEBUG, INFO, logger
 from laken.types import DataFrameTypeName, InputFrame, OutputFrame, WriteMode
 
 __all__ = [
@@ -15,7 +15,8 @@ __all__ = [
     "LocalLakehouse",
     "OutputFrame",
     "WriteMode",
+    "DEBUG",
+    "INFO",
     "logger",
-    "set_log_level",
     "load_environment",
 ]
