@@ -11,24 +11,6 @@ runner = CliRunner()
 
 
 @patch("laken.cli.LocalLakehouse")
-def test_status_command(mock_lh):
-    mock_lh.return_value.status.return_value = [
-        {
-            "table": "products",
-            "state": "mirror",
-            "source_version": "3",
-            "notes": "",
-        }
-    ]
-
-    result = runner.invoke(app, ["status"])
-
-    assert result.exit_code == 0
-    assert "products" in result.stdout
-    mock_lh.return_value.status.assert_called_once()
-
-
-@patch("laken.cli.LocalLakehouse")
 def test_refresh_command(mock_lh):
     result = runner.invoke(app, ["refresh", "raw_faculty"])
 

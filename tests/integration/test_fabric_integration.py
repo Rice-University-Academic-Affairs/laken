@@ -70,12 +70,6 @@ class TestFabricLakehouseRefresh:
         assert entry["state"] == "mirror"
         assert entry["cache"]["remote_size_bytes"] > 0
 
-    def test_status_reports_mirror(self, fabric_lakehouse):
-        fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
-        rows = {row["table"]: row for row in fabric_lakehouse.status()}
-        assert rows[INTEGRATION_TABLE]["state"] == "mirror"
-
-
 class TestFabricLakehouseWrite:
     def test_write_converts_mirror_to_local(
         self, fabric_lakehouse, clean_integration_table, local_row_pandas, capture_laken_logs

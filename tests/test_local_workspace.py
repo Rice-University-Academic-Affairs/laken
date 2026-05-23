@@ -3,7 +3,6 @@ import json
 import pandas as pd
 import pyarrow as pa
 import pytest
-import requests
 from fake_fabric_fetcher import FakeFabricFetcher
 
 from laken import LocalLakehouse
@@ -101,43 +100,6 @@ def test_write_to_mirror_converts_to_local_and_reset_restores_fabric(tmp_path, c
     assert _metadata(root)["raw_faculty"]["source"]["delta_version"] == 2
 
 
-def test_status_includes_orphan_delta_without_metadata(tmp_path):
-    root = tmp_path / ".laken" / "workspace"
-    table_dir = root / "Tables" / "orphan_table"
-    table_dir.mkdir(parents=True)
-    (table_dir / "_delta_log").mkdir()
-    lakehouse = LocalLakehouse(root=root)
-
-    rows = {row["table"]: row for row in lakehouse.status()}
-
-    assert "orphan_table" in rows
-    assert rows["orphan_table"]["state"] == "local"
-    assert rows["orphan_table"]["notes"] == "no metadata record"
-    assert "dbo.orphan_table" in lakehouse.list_tables()
-
-
-def test_status_marks_stale_and_sample_tables(tmp_path):
-    root = tmp_path / ".laken" / "workspace"
-    fetcher = FakeFabricFetcher()
-    fetcher.add("raw_faculty", pa.table({"id": [1]}), version=1, size_bytes=100)
-    fetcher.add("fact_events", pa.table({"id": [1, 2, 3]}), version=7, size_bytes=2_000_000)
-    lakehouse = LocalLakehouse(
-        root=root,
-        fabric_fetcher=fetcher,
-        max_mirror_mb=1,
-        max_sample_rows=2,
-    )
-    lakehouse.read_table("raw_faculty", frame_type="pandas")
-    lakehouse.read_table("fact_events", frame_type="pandas")
-    fetcher.add("raw_faculty", pa.table({"id": [2]}), version=2, size_bytes=100)
-
-    rows = {row["table"]: row for row in lakehouse.status()}
-
-    assert rows["raw_faculty"]["notes"] == "stale: Fabric is 2"
-    assert rows["fact_events"]["state"] == "sample"
-    assert rows["fact_events"]["notes"] == "2-row sample"
-
-
 def test_refresh_mirror_updates_cached_data_and_metadata(tmp_path, capture_laken_logs):
     root = tmp_path / ".laken" / "workspace"
     fetcher = FakeFabricFetcher()
@@ -217,19 +179,6 @@ def test_reset_without_fabric_source_raises(tmp_path):
     lakehouse.write_table(pd.DataFrame({"id": [1]}), "local_only")
     with pytest.raises(ValueError, match="has no Fabric source to reset"):
         lakehouse.reset_table("local_only")
-
-
-def test_status_freshness_unknown_when_inspect_fails(tmp_path):
-    root = tmp_path / ".laken" / "workspace"
-    fetcher = FakeFabricFetcher()
-    fetcher.add("raw_faculty", pa.table({"id": [1]}), version=1, size_bytes=100)
-    lakehouse = LocalLakehouse(root=root, fabric_fetcher=fetcher)
-    lakehouse.read_table("raw_faculty", frame_type="pandas")
-    fetcher.inspect_errors["raw_faculty"] = requests.RequestException("network down")
-
-    rows = {row["table"]: row for row in lakehouse.status()}
-
-    assert rows["raw_faculty"]["notes"] == "freshness unknown"
 
 
 def test_cache_boundary_at_max_mirror_mb_uses_mirror(tmp_path):

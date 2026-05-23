@@ -10,7 +10,6 @@ def test_help_exposes_commands():
 
     assert result.exit_code == 0
     assert "deploy" in result.output
-    assert "status" in result.output
     assert "refresh" in result.output
     assert "reset" in result.output
     assert "build" not in result.output

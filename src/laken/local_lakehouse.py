@@ -5,7 +5,6 @@ import shutil
 from pathlib import Path
 
 import pyarrow as pa
-import requests
 from deltalake import DeltaTable, write_deltalake
 from deltalake.exceptions import TableNotFoundError
 
@@ -181,18 +180,6 @@ class LocalLakehouse:
         )
         version = reset.get("source", {}).get("delta_version")
         logger.info("Reset %s to Fabric version %s.", key, version)
-
-    def status(self) -> list[dict[str, str]]:
-        rows: list[dict[str, str]] = []
-        seen: set[str] = set()
-        for key, entry in sorted(self._metadata.tables().items()):
-            seen.add(key)
-            rows.append(self._status_row(key, entry))
-        for key in self._metadata_keys_on_disk():
-            if key in seen:
-                continue
-            rows.append(self._status_row(key, self._inferred_metadata_entry(key)))
-        return sorted(rows, key=lambda row: row["table"])
 
     def _table_ref(self, name: str) -> TableRef:
         return parse_table_ref(name)
@@ -387,70 +374,10 @@ class LocalLakehouse:
             return int(cache["sample_rows"])
         return self._max_sample_rows
 
-    def _status_row(self, key: str, entry: dict) -> dict[str, str]:
-        state = str(entry.get("state", "local"))
-        source = entry.get("source", {})
-        version = source.get("delta_version")
-        notes = self._status_notes(key, entry)
-        return {
-            "table": key,
-            "state": state,
-            "source_version": str(version) if version is not None else "-",
-            "notes": notes,
-        }
-
-    def _metadata_keys_on_disk(self) -> list[str]:
-        keys: list[str] = []
-        for name in self.list_tables():
-            keys.append(self._table_key(name))
-        return keys
-
-    def _inferred_metadata_entry(self, key: str) -> dict:
-        return {
-            "state": "local",
-            "path": display_path(self._table_dir_from_key(key)),
-            "inferred": True,
-        }
-
-    def _table_dir_from_key(self, key: str) -> Path:
-        if "." in key:
-            schema, table = key.split(".", 1)
-        else:
-            schema, table = "dbo", key
-        if schema == "dbo":
-            return self._root / "Tables" / table
-        return self._root / "Tables" / schema / table
-
-    def _status_notes(self, key: str, entry: dict) -> str:
-        if entry.get("inferred"):
-            return "no metadata record"
-        state = entry.get("state")
-        if state == "local":
-            return "local-only"
-        notes = []
-        if state == "sample":
-            sample_rows = self._cached_max_sample_rows(entry)
-            notes.append(f"{sample_rows:,}-row sample")
-        source = entry.get("source", {})
-        cached_version = source.get("delta_version")
-        fabric_fetcher = self._resolve_fabric_fetcher()
-        if fabric_fetcher is not None and cached_version is not None:
-            try:
-                current = fabric_fetcher.inspect_table(source.get("table", key))
-            except _FRESHNESS_CHECK_ERRORS:
-                notes.append("freshness unknown")
-            else:
-                if current.delta_version != cached_version:
-                    notes.append(f"stale: Fabric is {current.delta_version}")
-        return ", ".join(notes)
-
     def _default_metadata_path(self) -> Path:
         if self._root.name == "workspace":
             return self._root.parent / "metadata" / "tables.json"
         return self._root / "metadata" / "tables.json"
-
-
-_FRESHNESS_CHECK_ERRORS = (TableNotFoundError, requests.RequestException, OSError)
 
 
 def _format_bytes(size_bytes: int) -> str:

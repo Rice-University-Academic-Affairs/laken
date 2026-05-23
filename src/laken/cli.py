@@ -38,15 +38,6 @@ def deploy(
 
 
 @app.command()
-def status() -> None:
-    def run() -> None:
-        rows = LocalLakehouse().status()
-        _print_status(rows)
-
-    _exit_on_error(run)
-
-
-@app.command()
 def refresh(table: str) -> None:
     def run() -> None:
         LocalLakehouse().refresh_table(table)
@@ -80,20 +71,6 @@ def _exit_on_error(action) -> None:
     ) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
-
-
-def _print_status(rows: list[dict[str, str]]) -> None:
-    headers = ["Table", "State", "Source version", "Notes"]
-    values = [[row["table"], row["state"], row["source_version"], row["notes"]] for row in rows]
-    widths = [
-        max(len(headers[index]), *(len(row[index]) for row in values))
-        if values
-        else len(headers[index])
-        for index in range(len(headers))
-    ]
-    typer.echo(" ".join(header.ljust(widths[index]) for index, header in enumerate(headers)))
-    for row in values:
-        typer.echo(" ".join(value.ljust(widths[index]) for index, value in enumerate(row)))
 
 
 def _build_project() -> tuple[ProjectMetadata, Path, Version]:
