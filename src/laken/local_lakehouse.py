@@ -90,7 +90,7 @@ class LocalLakehouse:
             entry = self._metadata.table(key)
             state = entry.get("state", "local") if entry is not None else "local"
             logger.debug("Reading %s from local Delta cache (state=%s)", name, state)
-        self._warn_about_cached_table(name)
+        self._log_sample_notice(name)
         return from_arrow(DeltaTable(str(table_dir)).to_pyarrow_table(), frame_type)
 
     def write_table(self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite") -> None:
@@ -226,37 +226,13 @@ class LocalLakehouse:
     def _table_key(self, name: str) -> str:
         return self._table_ref(name).metadata_key()
 
-    def _warn_about_cached_table(self, name: str) -> None:
+    def _log_sample_notice(self, name: str) -> None:
         key = self._table_key(name)
         entry = self._metadata.table(key)
-        if entry is None or entry.get("state") not in {"mirror", "sample"}:
+        if entry is None or entry.get("state") != "sample":
             return
-        if entry.get("state") == "sample":
-            sample_rows = self._cached_max_sample_rows(entry)
-            logger.info("%s is using a %s-row development sample.", key, f"{sample_rows:,}")
-        fabric_fetcher = self._resolve_fabric_fetcher()
-        if fabric_fetcher is None:
-            logger.info(
-                "%s is cached Fabric data (%s). Credentials are not configured; "
-                "using local cache without checking freshness.",
-                key,
-                entry.get("state"),
-            )
-            return
-        source = entry.get("source", {})
-        try:
-            current = fabric_fetcher.inspect_table(source.get("table", name))
-        except _FRESHNESS_CHECK_ERRORS:
-            logger.info("Could not check Fabric freshness. Using local cached %s.", key)
-            return
-        cached_version = source.get("delta_version")
-        if cached_version is not None and current.delta_version != cached_version:
-            logger.info("%s is cached from Fabric version %s.", key, cached_version)
-            logger.info("Fabric is now at version %s.", current.delta_version)
-            logger.info(
-                "Using the local cached version. Run `laken refresh %s` to update.",
-                key,
-            )
+        sample_rows = self._cached_max_sample_rows(entry)
+        logger.info("%s is using a %s-row development sample.", key, f"{sample_rows:,}")
 
     def _resolve_cache_limits(
         self,

@@ -43,8 +43,7 @@ def test_first_read_hydrates_full_delta_table_and_keeps_cache_stable(tmp_path, c
     cached = lakehouse.read_table("raw_faculty", frame_type="pandas")
 
     assert cached["id"].tolist() == [1, 2]
-    assert "raw_faculty is cached from Fabric version 42." in capture_laken_logs.text
-    assert "Fabric is now at version 45." in capture_laken_logs.text
+    assert fetcher.inspect_names == ["raw_faculty"]
 
 
 def test_large_table_hydrates_fixed_sample(tmp_path, capture_laken_logs):
@@ -218,35 +217,6 @@ def test_reset_without_fabric_source_raises(tmp_path):
     lakehouse.write_table(pd.DataFrame({"id": [1]}), "local_only")
     with pytest.raises(ValueError, match="has no Fabric source to reset"):
         lakehouse.reset_table("local_only")
-
-
-def test_read_warns_when_credentials_missing_for_cached_mirror(tmp_path, capture_laken_logs):
-    root = tmp_path / ".laken" / "workspace"
-    fetcher = FakeFabricFetcher()
-    fetcher.add("raw_faculty", pa.table({"id": [1]}), version=1, size_bytes=100)
-    lakehouse = LocalLakehouse(root=root, fabric_fetcher=fetcher)
-    lakehouse.read_table("raw_faculty", frame_type="pandas")
-    capture_laken_logs.clear()
-    lakehouse._fabric_fetcher = None
-    lakehouse._fabric_fetcher_resolved = True
-
-    lakehouse.read_table("raw_faculty", frame_type="pandas")
-
-    assert "Credentials are not configured" in capture_laken_logs.text
-
-
-def test_read_warns_when_inspect_fails(tmp_path, capture_laken_logs):
-    root = tmp_path / ".laken" / "workspace"
-    fetcher = FakeFabricFetcher()
-    fetcher.add("raw_faculty", pa.table({"id": [1]}), version=1, size_bytes=100)
-    lakehouse = LocalLakehouse(root=root, fabric_fetcher=fetcher)
-    lakehouse.read_table("raw_faculty", frame_type="pandas")
-    capture_laken_logs.clear()
-    fetcher.inspect_errors["raw_faculty"] = requests.RequestException("network down")
-
-    lakehouse.read_table("raw_faculty", frame_type="pandas")
-
-    assert "Could not check Fabric freshness" in capture_laken_logs.text
 
 
 def test_status_freshness_unknown_when_inspect_fails(tmp_path):
