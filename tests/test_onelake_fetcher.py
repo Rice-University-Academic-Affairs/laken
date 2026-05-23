@@ -4,7 +4,7 @@ import pyarrow as pa
 import pytest
 from fake_fabric_fetcher import FakeFabricFetcher
 
-from laken import LocalLakehouse
+from laken.local_lakehouse import LocalLakehouse
 from laken.onelake_fetcher import OneLakeFabricFetcher, _access_token, default_fabric_fetcher
 
 

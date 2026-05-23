@@ -4,6 +4,7 @@ import logging
 
 logger = logging.getLogger("laken")
 
+
 def ensure_logging() -> None:
     if logger.handlers:
         return

@@ -1,7 +1,7 @@
 [project]
 name = "laken"
-version = "0.1.5"
-description = "Local and Fabric lakehouse abstraction for modular, testable data code"
+version = "0.2.0"
+description = "Local Fabric table cache, lakehouse read/write, and deploy for modular Python on Microsoft Fabric"
 readme = "README.md"
 authors = [
     { name = "Cody VanZandt", email = "cody.a.vanzandt@gmail.com" }

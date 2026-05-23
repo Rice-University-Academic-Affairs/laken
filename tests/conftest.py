@@ -4,7 +4,7 @@ import pandas as pd
 import polars as pl
 import pytest
 
-from laken import LocalLakehouse
+from laken.local_lakehouse import LocalLakehouse
 from laken.onelake_fetcher import _token_cache
 
 _FABRIC_ENV_VARS = (

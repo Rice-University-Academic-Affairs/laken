@@ -4,8 +4,8 @@ import pyarrow as pa
 from fake_fabric_fetcher import FakeFabricFetcher
 from typer.testing import CliRunner
 
-from laken import LocalLakehouse
 from laken.cli import app
+from laken.local_lakehouse import LocalLakehouse
 
 runner = CliRunner()
 

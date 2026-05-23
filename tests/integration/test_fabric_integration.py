@@ -70,6 +70,7 @@ class TestFabricLakehouseRefresh:
         assert entry["state"] == "mirror"
         assert entry["cache"]["remote_size_bytes"] > 0
 
+
 class TestFabricLakehouseWrite:
     def test_write_converts_mirror_to_local(
         self, fabric_lakehouse, clean_integration_table, local_row_pandas, capture_laken_logs

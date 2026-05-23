@@ -2,7 +2,7 @@
 
 ## What this repo is
 
-Python library for testable lakehouse code on Microsoft Fabric (local parquet, Fabric/Spark in notebooks). This repo develops **laken** itself — `src/laken/`, tests, and packaging — not a separate app that consumes it.
+Python library for testable lakehouse code on Microsoft Fabric: local cached table fixtures + `read_table` / `write_table` + `laken deploy`. Public API is `Lakehouse` and `load_environment` (see `src/laken/__init__.py`). This repo develops **laken** itself — not a separate app that consumes it.
 
 ```
 src/laken/          lakehouse, local, fabric, frames, cli, deploy/
@@ -66,7 +66,7 @@ Step-by-step: `.cursor/skills/` — `/sync-dev-env`, `/run-tests`, `/run-lint`, 
 
 ### Integration tests
 
-27 tests under `tests/integration/` are marked `integration`. They run with `uv run pytest` (no extra flags). They need live Azure/Fabric env vars:
+Tests under `tests/integration/` are marked `integration`. They run with `uv run pytest` (no extra flags). They need live Azure/Fabric env vars:
 
 | Variable | Purpose |
 |----------|---------|

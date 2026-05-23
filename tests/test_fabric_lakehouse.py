@@ -1,9 +1,8 @@
 from unittest.mock import MagicMock, patch
 
-import pyarrow as pa
 import pytest
 
-from laken import FabricLakehouse
+from laken.fabric_lakehouse import FabricLakehouse
 
 
 def _mock_runtime_context():

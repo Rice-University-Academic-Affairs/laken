@@ -6,8 +6,11 @@ import pandas as pd
 import pyarrow as pa
 from fake_fabric_fetcher import FakeFabricFetcher
 
-from laken import FabricLakehouse, Lakehouse, LakehouseProtocol, LocalLakehouse
+from laken import Lakehouse
+from laken.fabric_lakehouse import FabricLakehouse
 from laken.lakehouse import _is_fabric_context
+from laken.lakehouse_protocol import LakehouseProtocol
+from laken.local_lakehouse import LocalLakehouse
 
 
 def _fake_notebookutils():

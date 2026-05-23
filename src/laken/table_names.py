@@ -24,9 +24,7 @@ def parse_table_ref(name: str) -> TableRef:
         return TableRef(schema="dbo", table=parts[0])
     if len(parts) == 2:
         return TableRef(schema=parts[0], table=parts[1])
-    raise ValueError(
-        f"unsupported table name format: {name!r} (use 'table' or 'schema.table')"
-    )
+    raise ValueError(f"unsupported table name format: {name!r} (use 'table' or 'schema.table')")
 
 
 def parse_table_name(name: str) -> tuple[str, str]:

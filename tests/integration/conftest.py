@@ -2,10 +2,9 @@ import os
 
 import pandas as pd
 import polars as pl
-import pyarrow as pa
 import pytest
 
-from laken import LocalLakehouse
+from laken.local_lakehouse import LocalLakehouse
 from laken.onelake_fetcher import (
     OneLakeFabricFetcher,
     _azure_credentials_available,
