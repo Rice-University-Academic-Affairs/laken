@@ -5,9 +5,6 @@ import shutil
 from pathlib import Path
 
 import pyarrow as pa
-import pyarrow.csv as pacsv
-import pyarrow.dataset as pads
-import pyarrow.parquet as pq
 import requests
 from deltalake import DeltaTable, write_deltalake
 from deltalake.exceptions import TableNotFoundError
@@ -22,7 +19,7 @@ from laken.table_names import (
     is_four_part_table_name,
     resolve_table_ref,
 )
-from laken.types import DataFrameTypeName, FileWrite, InputFrame, OutputFrame, WriteMode
+from laken.types import DataFrameTypeName, InputFrame, OutputFrame, WriteMode
 from laken.workspace import (
     DEFAULT_MAX_MIRROR_MB,
     DEFAULT_MAX_SAMPLE_ROWS,
@@ -64,7 +61,6 @@ class LocalLakehouse:
         self._metadata = TableMetadataStore(
             metadata_path if metadata_path is not None else self._default_metadata_path()
         )
-        (self._root / "Files").mkdir(parents=True, exist_ok=True)
         (self._root / "Tables").mkdir(parents=True, exist_ok=True)
         logger.debug(
             "LocalLakehouse ready at %s (lakehouse=%s, workspace=%s)",
@@ -158,66 +154,6 @@ class LocalLakehouse:
     def drop_table(self, name: str) -> None:
         shutil.rmtree(self._table_dir(name), ignore_errors=True)
         self._metadata.remove(self._table_key(name))
-
-    def read_file(self, path: str) -> bytes:
-        file_path = self._file_path(path)
-        if file_path.is_file() or _parquet_dataset_dir(file_path).is_dir():
-            logger.debug("Reading local file %s", path)
-            return _read_stored_file_bytes(file_path)
-        fabric_fetcher = self._resolve_fabric_fetcher()
-        if fabric_fetcher is None:
-            raise FileNotFoundError(f"file not found: {path}")
-        logger.debug("Hydrating file %s from Fabric", path)
-        data = fabric_fetcher.fetch_file(path)
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        file_path.write_bytes(data)
-        return data
-
-    def write_file(self, data: FileWrite, path: str, *, mode: WriteMode = "overwrite") -> None:
-        file_path = self._file_path(path)
-        if isinstance(data, bytes):
-            _ensure_storage_compatible(
-                file_path,
-                expected="file",
-                mode=mode,
-                suffix=file_path.suffix.lower(),
-            )
-            _write_bytes(file_path, data, mode=mode)
-            return
-        suffix = file_path.suffix.lower()
-        arrow_table = to_arrow(data)
-        if suffix == ".parquet":
-            expected = "parquet_dataset" if mode == "append" else "file"
-            _ensure_storage_compatible(
-                file_path,
-                expected=expected,
-                mode=mode,
-                suffix=suffix,
-            )
-            if mode == "overwrite":
-                _write_parquet_overwrite(file_path, arrow_table)
-            else:
-                _write_parquet_append(file_path, arrow_table)
-            return
-        if suffix == ".csv":
-            _ensure_storage_compatible(
-                file_path,
-                expected="file",
-                mode=mode,
-                suffix=suffix,
-            )
-            _write_csv(file_path, arrow_table, mode=mode)
-            return
-        raise ValueError(f"unsupported file extension for dataframe write: {suffix}")
-
-    def file_exists(self, path: str) -> bool:
-        file_path = self._file_path(path)
-        return file_path.is_file() or _parquet_dataset_dir(file_path).is_dir()
-
-    def delete_file(self, path: str) -> None:
-        file_path = self._file_path(path)
-        file_path.unlink(missing_ok=True)
-        shutil.rmtree(_parquet_dataset_dir(file_path), ignore_errors=True)
 
     def refresh_table(self, name: str) -> None:
         key = self._table_key(name)
@@ -558,107 +494,8 @@ class LocalLakehouse:
             return self._root.parent / "metadata" / "tables.json"
         return self._root / "metadata" / "tables.json"
 
-    def _file_path(self, path: str) -> Path:
-        normalized = Path(path)
-        if normalized.is_absolute() or ".." in normalized.parts:
-            raise ValueError(f"invalid file path: {path}")
-        return self._root / "Files" / normalized
-
 
 _FRESHNESS_CHECK_ERRORS = (TableNotFoundError, requests.RequestException, OSError)
-
-
-def _parquet_dataset_dir(file_path: Path) -> Path:
-    return file_path.parent / f"{file_path.name}.d"
-
-
-def _read_stored_file_bytes(file_path: Path) -> bytes:
-    dataset_dir = _parquet_dataset_dir(file_path)
-    if dataset_dir.is_dir():
-        parts = sorted(dataset_dir.glob("part-*.parquet"))
-        if len(parts) == 1:
-            return parts[0].read_bytes()
-        dataset = pads.dataset(dataset_dir, format="parquet")
-        sink = pa.BufferOutputStream()
-        writer = pq.ParquetWriter(sink, dataset.schema)
-        for batch in dataset.to_batches():
-            writer.write_batch(batch)
-        writer.close()
-        return sink.getvalue().to_pybytes()
-    return file_path.read_bytes()
-
-
-def _file_storage_shape(file_path: Path) -> str | None:
-    if _parquet_dataset_dir(file_path).is_dir():
-        return "parquet_dataset"
-    if file_path.is_file():
-        return "file"
-    return None
-
-
-def _storage_shapes_compatible(existing: str, expected: str, *, suffix: str) -> bool:
-    if existing == expected:
-        return True
-    return suffix == ".parquet" and existing == "file" and expected == "parquet_dataset"
-
-
-def _ensure_storage_compatible(
-    file_path: Path,
-    *,
-    expected: str,
-    mode: WriteMode,
-    suffix: str,
-) -> None:
-    existing = _file_storage_shape(file_path)
-    if existing is None or mode == "overwrite":
-        return
-    if not _storage_shapes_compatible(existing, expected, suffix=suffix):
-        raise ValueError(
-            f"cannot {mode} {file_path.name}: existing storage is {existing}, expected {expected}"
-        )
-
-
-def _write_bytes(file_path: Path, data: bytes, *, mode: WriteMode) -> None:
-    if mode == "overwrite":
-        shutil.rmtree(_parquet_dataset_dir(file_path), ignore_errors=True)
-    file_path.parent.mkdir(parents=True, exist_ok=True)
-    if mode == "append" and file_path.is_file():
-        with file_path.open("ab") as handle:
-            handle.write(data)
-        return
-    file_path.write_bytes(data)
-
-
-def _write_csv(file_path: Path, arrow_table: pa.Table, *, mode: WriteMode) -> None:
-    if mode == "overwrite":
-        shutil.rmtree(_parquet_dataset_dir(file_path), ignore_errors=True)
-    file_path.parent.mkdir(parents=True, exist_ok=True)
-    if mode == "append" and file_path.is_file():
-        existing = pacsv.read_csv(file_path)
-        arrow_table = pa.concat_tables([existing, arrow_table])
-    pacsv.write_csv(arrow_table, file_path)
-
-
-def _write_parquet_overwrite(file_path: Path, arrow_table: pa.Table) -> None:
-    shutil.rmtree(_parquet_dataset_dir(file_path), ignore_errors=True)
-    if file_path.is_file():
-        file_path.unlink()
-    file_path.parent.mkdir(parents=True, exist_ok=True)
-    pq.write_table(arrow_table, file_path)
-
-
-def _write_parquet_append(file_path: Path, arrow_table: pa.Table) -> None:
-    dataset_dir = _parquet_dataset_dir(file_path)
-    if file_path.is_file():
-        dataset_dir.mkdir(parents=True, exist_ok=True)
-        file_path.rename(dataset_dir / "part-00000.parquet")
-    elif not dataset_dir.is_dir():
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        pq.write_table(arrow_table, file_path)
-        return
-    dataset_dir.mkdir(parents=True, exist_ok=True)
-    part_count = len(list(dataset_dir.glob("part-*.parquet")))
-    pq.write_table(arrow_table, dataset_dir / f"part-{part_count:05d}.parquet")
 
 
 def _format_bytes(size_bytes: int) -> str:

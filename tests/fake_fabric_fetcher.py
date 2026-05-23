@@ -6,11 +6,9 @@ from laken.workspace import FabricTableInfo
 class FakeFabricFetcher:
     def __init__(self, *, inspect_errors: dict[str, Exception] | None = None):
         self.tables: dict[str, dict] = {}
-        self.files: dict[str, bytes] = {}
         self.max_rows: list[int | None] = []
         self.inspect_names: list[str] = []
         self.fetch_names: list[str] = []
-        self.fetch_file_paths: list[str] = []
         self.inspect_errors = inspect_errors or {}
 
     def add(
@@ -47,10 +45,3 @@ class FakeFabricFetcher:
         if max_rows is None:
             return table
         return table.slice(0, max_rows)
-
-    def add_file(self, path: str, data: bytes) -> None:
-        self.files[path] = data
-
-    def fetch_file(self, path: str) -> bytes:
-        self.fetch_file_paths.append(path)
-        return self.files[path]

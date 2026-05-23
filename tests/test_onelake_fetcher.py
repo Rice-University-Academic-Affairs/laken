@@ -212,30 +212,6 @@ def test_onelake_fetcher_cross_workspace_uses_name_based_uri(mock_post, mock_del
     )
 
 
-@patch("laken.onelake_fetcher.DeltaStorageHandler")
-@patch("laken.onelake_fetcher.requests.post")
-def test_onelake_fetcher_fetch_file_returns_bytes(mock_post, mock_handler, monkeypatch):
-    monkeypatch.setenv("AZURE_TENANT_ID", "tenant-id")
-    monkeypatch.setenv("AZURE_CLIENT_ID", "client-id")
-    monkeypatch.setenv("AZURE_CLIENT_SECRET", "client-secret")
-    mock_post.return_value.raise_for_status.return_value = None
-    mock_post.return_value.json.return_value = {"access_token": "tok"}
-    mock_instance = mock_handler.return_value
-    mock_handle = mock_instance.open_input_file.return_value.__enter__.return_value
-    mock_handle.read.return_value = b"raw-file-bytes"
-
-    fetcher = OneLakeFabricFetcher(
-        workspace_name="WS",
-        lakehouse="LH",
-        workspace_id="ws-id",
-        lakehouse_id="lh-id",
-    )
-    data = fetcher.fetch_file("data/example.json")
-
-    mock_instance.open_input_file.assert_called_once_with("Files/data/example.json")
-    assert data == b"raw-file-bytes"
-
-
 @patch("laken.onelake_fetcher.requests.post")
 def test_access_token_is_cached(mock_post, monkeypatch):
     monkeypatch.setenv("AZURE_TENANT_ID", "tenant-id")

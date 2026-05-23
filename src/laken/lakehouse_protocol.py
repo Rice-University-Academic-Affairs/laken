@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from laken.types import DataFrameTypeName, FileWrite, InputFrame, OutputFrame, WriteMode
+from laken.types import DataFrameTypeName, InputFrame, OutputFrame, WriteMode
 
 
 @runtime_checkable
@@ -33,11 +33,3 @@ class LakehouseProtocol(Protocol):
     def table_exists(self, name: str) -> bool: ...
 
     def drop_table(self, name: str) -> None: ...
-
-    def read_file(self, path: str) -> bytes: ...
-
-    def write_file(self, data: FileWrite, path: str, *, mode: WriteMode = "overwrite") -> None: ...
-
-    def file_exists(self, path: str) -> bool: ...
-
-    def delete_file(self, path: str) -> None: ...

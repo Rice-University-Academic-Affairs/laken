@@ -4,8 +4,6 @@ import time
 import pyarrow as pa
 import requests
 from deltalake import DeltaTable
-from deltalake.fs import DeltaStorageHandler
-
 from laken.table_names import TableRef, resolve_table_ref
 from laken.workspace import FabricTableInfo
 
@@ -51,19 +49,6 @@ class OneLakeFabricFetcher:
         if max_rows is None:
             return delta_table.to_pyarrow_table()
         return delta_table.to_pyarrow_dataset().head(max_rows)
-
-    def fetch_file(self, path: str) -> bytes:
-        normalized = path.replace("\\", "/").lstrip("/")
-        root_uri = _lakehouse_root_uri(
-            self._workspace_name,
-            self._lakehouse,
-            workspace_id=self._workspace_id,
-            lakehouse_id=self._lakehouse_id,
-        )
-        storage_path = _file_storage_path(normalized)
-        handler = DeltaStorageHandler(root_uri, _storage_options())
-        with handler.open_input_file(storage_path) as handle:
-            return handle.read()
 
     def _table_ref(self, name: str) -> TableRef:
         ref = resolve_table_ref(
@@ -164,11 +149,6 @@ def _lakehouse_root_uri(
     if workspace_id and lakehouse_id:
         return f"abfss://{workspace_id}@onelake.dfs.fabric.microsoft.com/{lakehouse_id}/"
     return f"abfss://{workspace_name}@onelake.dfs.fabric.microsoft.com/{lakehouse}.Lakehouse/"
-
-
-def _file_storage_path(path: str) -> str:
-    normalized = path.replace("\\", "/").lstrip("/")
-    return f"Files/{normalized}"
 
 
 def _storage_options() -> dict[str, str]:

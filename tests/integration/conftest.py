@@ -3,7 +3,6 @@ import os
 import pandas as pd
 import polars as pl
 import pyarrow as pa
-import pyarrow.csv as pacsv
 import pytest
 
 from laken import LocalLakehouse
@@ -14,7 +13,6 @@ from laken.onelake_fetcher import (
 )
 
 INTEGRATION_TABLE = "example_integration_test"
-INTEGRATION_CSV = "examples/integration_test/example_integration_test.csv"
 
 EXPECTED_ROWS = [
     {"id": 1, "name": "Alice", "value": 10.5},
@@ -36,11 +34,6 @@ def _require_integration_fixtures(fetcher: OneLakeFabricFetcher) -> None:
     assert table.num_rows == expected, (
         f"Integration table {INTEGRATION_TABLE!r} must exist in Fabric with "
         f"{expected} rows (got {table.num_rows})"
-    )
-    csv_table = pacsv.read_csv(pa.BufferReader(fetcher.fetch_file(INTEGRATION_CSV)))
-    assert csv_table.num_rows == expected, (
-        f"Integration file {INTEGRATION_CSV!r} must exist in Fabric with "
-        f"{expected} rows (got {csv_table.num_rows})"
     )
 
 

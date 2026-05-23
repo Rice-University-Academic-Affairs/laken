@@ -11,7 +11,7 @@ from laken.lakehouse_protocol import LakehouseProtocol
 from laken.local_lakehouse import LocalLakehouse
 from laken.logger import ensure_logging, logger
 from laken.spark_runtime import SparkDataFrame
-from laken.types import DataFrameTypeName, FileWrite, InputFrame, OutputFrame, WriteMode
+from laken.types import DataFrameTypeName, InputFrame, OutputFrame, WriteMode
 from laken.workspace import DEFAULT_MAX_MIRROR_MB, DEFAULT_MAX_SAMPLE_ROWS, FabricTableFetcher
 
 
@@ -166,18 +166,6 @@ class Lakehouse:
 
     def drop_table(self, name: str) -> None:
         self._implementation.drop_table(name)
-
-    def read_file(self, path: str) -> bytes:
-        return self._implementation.read_file(path)
-
-    def write_file(self, data: FileWrite, path: str, *, mode: WriteMode = "overwrite") -> None:
-        self._implementation.write_file(data, path, mode=mode)
-
-    def file_exists(self, path: str) -> bool:
-        return self._implementation.file_exists(path)
-
-    def delete_file(self, path: str) -> None:
-        return self._implementation.delete_file(path)
 
 
 def _is_fabric_context() -> bool:
