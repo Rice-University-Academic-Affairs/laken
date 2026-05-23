@@ -296,16 +296,13 @@ def test_read_table_override_cache_thresholds(tmp_path):
     assert fetcher.max_rows == [None]
 
 
-def test_hydrate_four_part_name_without_workspace_context(tmp_path):
+def test_read_three_part_name_raises(tmp_path):
     root = tmp_path / ".laken" / "workspace"
     fetcher = FakeFabricFetcher()
-    fabric_name = "MyWorkspace.Sales_LH.dbo.products"
-    fetcher.add(fabric_name, pa.table({"id": [7]}), version=2, size_bytes=50)
     lakehouse = LocalLakehouse(root=root, fabric_fetcher=fetcher)
 
-    result = lakehouse.read_table(fabric_name, frame_type="pandas")
-
-    assert result["id"].tolist() == [7]
+    with pytest.raises(ValueError, match="schema.table"):
+        lakehouse.read_table("MyWorkspace.Sales_LH.products", frame_type="pandas")
 
 
 def test_drop_table_removes_mirror_metadata(tmp_path):
@@ -361,7 +358,7 @@ def test_hydrate_maps_table_not_found_to_file_not_found(tmp_path):
         lakehouse.read_table("missing", frame_type="pandas")
 
 
-def test_refresh_uses_stored_four_part_source_table(tmp_path):
+def test_refresh_uses_stored_fabric_source_table(tmp_path):
     root = tmp_path / ".laken" / "workspace"
     fetcher = FakeFabricFetcher()
     fabric_name = "MyWorkspace.Sales_LH.marketing.products"

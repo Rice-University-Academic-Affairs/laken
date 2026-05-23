@@ -34,16 +34,8 @@ class Lakehouse:
         if _is_fabric_context():
             from laken.fabric_lakehouse import FabricLakehouse
 
-            self._implementation: LakehouseProtocol = FabricLakehouse(
-                lakehouse=lakehouse,
-                lakehouse_id=lakehouse_id,
-                workspace_id=workspace_id,
-                workspace_name=workspace_name,
-            )
-            logger.debug(
-                "Fabric runtime context; using FabricLakehouse (lakehouse=%s)",
-                lakehouse,
-            )
+            self._implementation: LakehouseProtocol = FabricLakehouse()
+            logger.debug("Fabric runtime context; using FabricLakehouse")
         else:
             self._implementation = LocalLakehouse(
                 root=root,

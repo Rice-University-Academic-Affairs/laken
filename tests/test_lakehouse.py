@@ -47,9 +47,9 @@ class TestLakehouseDispatch:
 
     def test_fabric_context_uses_fabric_lakehouse(self, monkeypatch):
         monkeypatch.setitem(sys.modules, "notebookutils", _fake_notebookutils())
-        lh = Lakehouse(lakehouse="Sales_LH")
+        lh = Lakehouse()
         assert isinstance(lh._implementation, FabricLakehouse)
-        assert lh._implementation._lakehouse == "Sales_LH"
+        assert lh._implementation._lakehouse == "Default_LH"
         assert lh._implementation._workspace_id == "ws-id-123"
         assert lh._implementation._workspace_name == "MyWorkspace"
 
@@ -66,7 +66,7 @@ class TestLakehouseDispatch:
             patch("laken.lakehouse._is_fabric_context", return_value=True),
             patch("laken.fabric_lakehouse.FabricLakehouse", return_value=implementation),
         ):
-            lh = Lakehouse(lakehouse="Sales_LH")
+            lh = Lakehouse()
         assert lh.read_table("products", frame_type="pandas") == "result"
         implementation.read_table.assert_called_once_with(
             "products",

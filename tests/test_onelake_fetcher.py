@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 import pyarrow as pa
+import pytest
 from fake_fabric_fetcher import FakeFabricFetcher
 
 from laken import LocalLakehouse
@@ -188,28 +189,18 @@ def test_onelake_fetcher_dbo_table_uri(mock_post, mock_delta, monkeypatch):
     assert uri == "abfss://ws-id@onelake.dfs.fabric.microsoft.com/lh-id/Tables/products"
 
 
-@patch("laken.onelake_fetcher.DeltaTable")
-@patch("laken.onelake_fetcher.requests.post")
-def test_onelake_fetcher_cross_workspace_uses_name_based_uri(mock_post, mock_delta, monkeypatch):
+def test_onelake_fetcher_three_part_table_name_raises(monkeypatch):
     monkeypatch.setenv("AZURE_TENANT_ID", "tenant-id")
     monkeypatch.setenv("AZURE_CLIENT_ID", "client-id")
     monkeypatch.setenv("AZURE_CLIENT_SECRET", "client-secret")
-    mock_post.return_value.raise_for_status.return_value = None
-    mock_post.return_value.json.return_value = {"access_token": "tok"}
-    mock_delta.return_value.version.return_value = 1
-    mock_delta.return_value.metadata.return_value = None
-
     fetcher = OneLakeFabricFetcher(
         workspace_name="MyWorkspace",
         lakehouse="Sales_LH",
         workspace_id="ws-uuid",
         lakehouse_id="lh-uuid",
     )
-    fetcher.inspect_table("OtherWorkspace.Other_LH.dbo.products")
-
-    assert mock_delta.call_args.args[0] == (
-        "abfss://OtherWorkspace@onelake.dfs.fabric.microsoft.com/Other_LH.Lakehouse/Tables/products"
-    )
+    with pytest.raises(ValueError, match="schema.table"):
+        fetcher.inspect_table("OtherWorkspace.Other_LH.products")
 
 
 @patch("laken.onelake_fetcher.requests.post")

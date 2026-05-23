@@ -15,9 +15,9 @@ from laken.logger import ensure_logging, logger
 from laken.onelake_fetcher import default_fabric_fetcher
 from laken.table_names import (
     TableRef,
+    format_fabric_table_name,
     format_table_name,
-    is_four_part_table_name,
-    resolve_table_ref,
+    parse_table_ref,
 )
 from laken.types import DataFrameTypeName, InputFrame, OutputFrame, WriteMode
 from laken.workspace import (
@@ -207,13 +207,7 @@ class LocalLakehouse:
         return sorted(rows, key=lambda row: row["table"])
 
     def _table_ref(self, name: str) -> TableRef:
-        return resolve_table_ref(
-            name,
-            workspace_name=self._workspace_name,
-            workspace_id=self._workspace_id,
-            lakehouse_name=self._lakehouse,
-            lakehouse_id=self._lakehouse_id,
-        )
+        return parse_table_ref(name)
 
     def _table_dir(self, name: str) -> Path:
         ref = self._table_ref(name)
@@ -287,18 +281,15 @@ class LocalLakehouse:
         return resolved_mb, resolved_rows
 
     def _resolve_fetch_name(self, name: str) -> str:
-        stripped = name.strip()
-        if is_four_part_table_name(stripped):
-            return stripped
-        ref = self._table_ref(stripped)
+        ref = self._table_ref(name)
         if self._can_resolve_fabric_name():
-            return TableRef(
-                schema=ref.schema,
-                table=ref.table,
-                workspace=ref.workspace or self._workspace_name,
-                lakehouse=ref.lakehouse or self._lakehouse,
-            ).fabric_four_part()
-        return stripped
+            return format_fabric_table_name(
+                self._workspace_name,
+                self._lakehouse,
+                ref.schema,
+                ref.table,
+            )
+        return name.strip()
 
     def _fetch_and_cache(
         self,

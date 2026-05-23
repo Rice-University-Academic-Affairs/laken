@@ -30,11 +30,6 @@ class TestFabricFetcher:
         table = fabric_fetcher.fetch_table(INTEGRATION_TABLE, max_rows=3)
         assert table.num_rows == 3
 
-    def test_fetch_table_four_part_name(self, fabric_fetcher):
-        info = fabric_fetcher.inspect_table(INTEGRATION_TABLE)
-        table = fabric_fetcher.fetch_table(info.table)
-        assert table.num_rows == 10
-
 
 class TestFabricLakehouseRead:
     def test_read_table_hydrates(self, fabric_lakehouse, df_kind):

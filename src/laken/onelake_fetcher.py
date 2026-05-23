@@ -4,7 +4,8 @@ import time
 import pyarrow as pa
 import requests
 from deltalake import DeltaTable
-from laken.table_names import TableRef, resolve_table_ref
+
+from laken.table_names import TableRef, format_fabric_table_name, parse_table_ref
 from laken.workspace import FabricTableInfo
 
 ONELAKE_SCOPE = "https://storage.azure.com/.default"
@@ -29,9 +30,9 @@ class OneLakeFabricFetcher:
         self._lakehouse_id = lakehouse_id
 
     def inspect_table(self, name: str) -> FabricTableInfo:
-        ref = self._table_ref(name)
+        ref = parse_table_ref(name)
         delta_table = self._delta_table(ref)
-        fabric_name = ref.fabric_four_part()
+        fabric_name = self._fabric_table_name(ref)
         actions = delta_table.get_add_actions()
         size_bytes = sum(
             value for value in actions.column("size_bytes").to_pylist() if value is not None
@@ -45,49 +46,25 @@ class OneLakeFabricFetcher:
         )
 
     def fetch_table(self, name: str, *, max_rows: int | None = None) -> pa.Table:
-        delta_table = self._delta_table(self._table_ref(name))
+        delta_table = self._delta_table(parse_table_ref(name))
         if max_rows is None:
             return delta_table.to_pyarrow_table()
         return delta_table.to_pyarrow_dataset().head(max_rows)
 
-    def _table_ref(self, name: str) -> TableRef:
-        ref = resolve_table_ref(
-            name,
-            workspace_name=self._workspace_name,
-            workspace_id=self._workspace_id,
-            lakehouse_name=self._lakehouse,
-            lakehouse_id=self._lakehouse_id,
+    def _fabric_table_name(self, ref: TableRef) -> str:
+        return format_fabric_table_name(
+            self._workspace_name,
+            self._lakehouse,
+            ref.schema,
+            ref.table,
         )
-        if ref.workspace is None:
-            ref = TableRef(
-                schema=ref.schema,
-                table=ref.table,
-                workspace=self._workspace_name,
-                lakehouse=ref.lakehouse or self._lakehouse,
-            )
-        elif ref.lakehouse is None:
-            ref = TableRef(
-                schema=ref.schema,
-                table=ref.table,
-                workspace=ref.workspace,
-                lakehouse=self._lakehouse,
-            )
-        return ref
-
-    def _path_ids(self, ref: TableRef) -> tuple[str | None, str | None]:
-        if ref.workspace == self._workspace_name and ref.lakehouse == self._lakehouse:
-            return self._workspace_id, self._lakehouse_id
-        return None, None
 
     def _delta_table(self, ref: TableRef) -> DeltaTable:
-        workspace_id, lakehouse_id = self._path_ids(ref)
         return DeltaTable(
             _table_uri(
                 ref,
-                workspace_name=ref.workspace or self._workspace_name,
-                lakehouse=ref.lakehouse or self._lakehouse,
-                workspace_id=workspace_id,
-                lakehouse_id=lakehouse_id,
+                workspace_id=self._workspace_id,
+                lakehouse_id=self._lakehouse_id,
             ),
             storage_options=_storage_options(),
         )
@@ -124,31 +101,12 @@ def default_fabric_fetcher(
 def _table_uri(
     ref: TableRef,
     *,
-    workspace_name: str,
-    lakehouse: str,
-    workspace_id: str | None = None,
-    lakehouse_id: str | None = None,
+    workspace_id: str,
+    lakehouse_id: str,
 ) -> str:
     table_path = ref.table if ref.schema == "dbo" else f"{ref.schema}/{ref.table}"
-    root = _lakehouse_root_uri(
-        workspace_name,
-        lakehouse,
-        workspace_id=workspace_id,
-        lakehouse_id=lakehouse_id,
-    )
+    root = f"abfss://{workspace_id}@onelake.dfs.fabric.microsoft.com/{lakehouse_id}/"
     return f"{root}Tables/{table_path}"
-
-
-def _lakehouse_root_uri(
-    workspace_name: str,
-    lakehouse: str,
-    *,
-    workspace_id: str | None = None,
-    lakehouse_id: str | None = None,
-) -> str:
-    if workspace_id and lakehouse_id:
-        return f"abfss://{workspace_id}@onelake.dfs.fabric.microsoft.com/{lakehouse_id}/"
-    return f"abfss://{workspace_name}@onelake.dfs.fabric.microsoft.com/{lakehouse}.Lakehouse/"
 
 
 def _storage_options() -> dict[str, str]:

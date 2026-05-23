@@ -1,36 +1,20 @@
 from __future__ import annotations
 
-import os
-
 from laken.frames import from_spark, to_spark
 from laken.logger import ensure_logging, logger
 from laken.spark_runtime import get_or_create_spark_session
-from laken.table_names import (
-    TableRef,
-    format_table_name,
-    is_four_part_table_name,
-    resolve_table_ref,
-    to_spark_table_name,
-)
+from laken.table_names import format_table_name, parse_table_ref, spark_table_name
 from laken.types import DataFrameTypeName, InputFrame, OutputFrame, WriteMode
 
 
 class FabricLakehouse:
-    def __init__(
-        self,
-        lakehouse: str | None = None,
-        workspace_id: str | None = None,
-        workspace_name: str | None = None,
-        lakehouse_id: str | None = None,
-    ):
+    def __init__(self) -> None:
         ensure_logging()
         nu = self._notebookutils()
         ctx = nu.runtime.context
-        self._explicit_lakehouse = lakehouse is not None
-        self._lakehouse = lakehouse or ctx.get("defaultLakehouseName")
-        self._workspace_id = workspace_id or ctx.get("currentWorkspaceId")
-        self._workspace_name = workspace_name or ctx.get("currentWorkspaceName")
-        self._lakehouse_id = lakehouse_id or os.getenv("FABRIC_LAKEHOUSE_ID")
+        self._lakehouse = ctx.get("defaultLakehouseName")
+        self._workspace_id = ctx.get("currentWorkspaceId")
+        self._workspace_name = ctx.get("currentWorkspaceName")
         logger.debug(
             "FabricLakehouse ready (lakehouse=%s, workspace=%s)",
             self._lakehouse,
@@ -104,29 +88,8 @@ class FabricLakehouse:
         spark = self._spark()
         spark.catalog.dropTable(self._resolve_table_name(name), ignoreIfNotExists=True)
 
-    def _table_ref(self, name: str) -> TableRef:
-        ref = resolve_table_ref(
-            name,
-            workspace_name=self._workspace_name,
-            workspace_id=self._workspace_id,
-            lakehouse_name=self._lakehouse,
-            lakehouse_id=self._lakehouse_id,
-        )
-        return TableRef(
-            schema=ref.schema,
-            table=ref.table,
-            workspace=ref.workspace or self._workspace_name,
-            lakehouse=ref.lakehouse or self._lakehouse,
-        )
-
     def _resolve_table_name(self, name: str) -> str:
-        stripped = name.strip()
-        if is_four_part_table_name(stripped):
-            return stripped
-        if self._explicit_lakehouse:
-            self._require_cross_lakehouse_context()
-        ref = self._table_ref(stripped)
-        return to_spark_table_name(ref, explicit_lakehouse=self._explicit_lakehouse)
+        return spark_table_name(parse_table_ref(name))
 
     def _spark(self):
         return get_or_create_spark_session()
@@ -147,18 +110,6 @@ class FabricLakehouse:
 
         return notebookutils
 
-    def _require_cross_lakehouse_context(self) -> None:
-        missing = []
-        if not self._lakehouse:
-            missing.append("lakehouse")
-        if not self._lakehouse_id:
-            missing.append("lakehouse_id")
-        if not self._workspace_id:
-            missing.append("workspace_id")
-        if not self._workspace_name:
-            missing.append("workspace_name")
-        if missing:
-            raise ValueError(f"cross-lakehouse operations require: {', '.join(missing)}")
 
 def _fabric_constants():
     __import__("com.microsoft.spark.fabric")

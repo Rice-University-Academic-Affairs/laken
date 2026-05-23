@@ -62,14 +62,6 @@ class TestFabricRuntimeContext:
         assert lh._lakehouse == "Default_LH"
         assert lh._workspace_id == "ws-id-123"
         assert lh._workspace_name == "MyWorkspace"
-        assert lh._explicit_lakehouse is False
-
-    @patch("laken.fabric_lakehouse.FabricLakehouse._notebookutils")
-    def test_explicit_lakehouse_flag(self, mock_nu_fn, mock_notebookutils):
-        mock_nu_fn.return_value = mock_notebookutils
-        lh = FabricLakehouse(lakehouse="Other_LH")
-        assert lh._explicit_lakehouse is True
-        assert lh._lakehouse == "Other_LH"
 
 
 class TestFabricDefaultLakehouse:
@@ -196,46 +188,9 @@ class TestFabricDefaultLakehouse:
         lh.drop_table("products")
         mock_spark.catalog.dropTable.assert_called_with("products", ignoreIfNotExists=True)
 
-
-class TestFabricCrossLakehouse:
     @patch("laken.fabric_lakehouse.FabricLakehouse._notebookutils")
-    def test_resolve_table_four_part(self, mock_nu_fn, mock_notebookutils):
+    def test_resolve_three_part_name_raises(self, mock_nu_fn, mock_notebookutils):
         mock_nu_fn.return_value = mock_notebookutils
-        lh = FabricLakehouse(
-            lakehouse="Sales_LH",
-            workspace_id="ws-id-123",
-            workspace_name="MyWorkspace",
-            lakehouse_id="lh-id-456",
-        )
-        assert lh._resolve_table_name("marketing.products") == (
-            "MyWorkspace.Sales_LH.marketing.products"
-        )
-
-    @patch("laken.fabric_lakehouse.FabricLakehouse._notebookutils")
-    def test_resolve_table_passes_through_existing_four_part_name(
-        self, mock_nu_fn, mock_notebookutils
-    ):
-        mock_nu_fn.return_value = mock_notebookutils
-        lh = FabricLakehouse(
-            lakehouse="Sales_LH",
-            workspace_id="ws-id-123",
-            workspace_name="MyWorkspace",
-            lakehouse_id="lh-id-456",
-        )
-        name = "MyWorkspace.Sales_LH.marketing.products"
-        assert lh._resolve_table_name(name) == name
-
-    @patch("laken.fabric_lakehouse.FabricLakehouse._notebookutils")
-    def test_cross_lakehouse_requires_workspace_and_lakehouse_ids(
-        self, mock_nu_fn, mock_notebookutils
-    ):
-        mock_nu_fn.return_value = mock_notebookutils
-        lh = FabricLakehouse(
-            lakehouse="Sales_LH",
-            workspace_id="ws-id-123",
-            workspace_name="MyWorkspace",
-            lakehouse_id=None,
-        )
-        lh._lakehouse_id = None
-        with pytest.raises(ValueError, match="lakehouse_id"):
-            lh._resolve_table_name("products")
+        lh = FabricLakehouse()
+        with pytest.raises(ValueError, match="schema.table"):
+            lh._resolve_table_name("MyWorkspace.Sales_LH.products")
