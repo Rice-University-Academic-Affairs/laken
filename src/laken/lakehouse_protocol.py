@@ -16,16 +16,6 @@ class LakehouseProtocol(Protocol):
         max_sample_rows: int | None = None,
     ) -> OutputFrame: ...
 
-    def load_table_from_warehouse(
-        self,
-        table_name: str,
-        warehouse_name: str,
-        *,
-        schema: str | None = "dbo",
-        workspace_id: str | None = None,
-        frame_type: DataFrameTypeName | None = None,
-    ) -> OutputFrame: ...
-
     def write_table(self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite") -> None: ...
 
     def list_tables(self) -> list[str]: ...

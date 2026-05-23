@@ -96,57 +96,6 @@ class Lakehouse:
             max_sample_rows=max_sample_rows,
         )
 
-    @overload
-    def load_table_from_warehouse(
-        self,
-        table_name: str,
-        warehouse_name: str,
-        *,
-        schema: str | None = "dbo",
-        workspace_id: str | None = None,
-        frame_type: Literal["pandas"] = "pandas",
-    ) -> pd.DataFrame: ...
-
-    @overload
-    def load_table_from_warehouse(
-        self,
-        table_name: str,
-        warehouse_name: str,
-        *,
-        schema: str | None = "dbo",
-        workspace_id: str | None = None,
-        frame_type: Literal["spark"],
-    ) -> SparkDataFrame: ...
-
-    @overload
-    def load_table_from_warehouse(
-        self,
-        table_name: str,
-        warehouse_name: str,
-        *,
-        schema: str | None = "dbo",
-        workspace_id: str | None = None,
-        frame_type: Literal["polars"],
-    ) -> pl.DataFrame: ...
-
-    def load_table_from_warehouse(
-        self,
-        table_name: str,
-        warehouse_name: str,
-        *,
-        schema: str | None = "dbo",
-        workspace_id: str | None = None,
-        frame_type: DataFrameTypeName | None = None,
-    ) -> OutputFrame:
-        kind = _default_frame_type(self._implementation) if frame_type is None else frame_type
-        return self._implementation.load_table_from_warehouse(
-            table_name,
-            warehouse_name,
-            schema=schema,
-            workspace_id=workspace_id,
-            frame_type=kind,
-        )
-
     def write_table(self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite") -> None:
         self._implementation.write_table(df, name, mode=mode)
 

@@ -36,28 +36,6 @@ class FabricLakehouse:
         spark_df = spark.read.table(resolved)
         return from_spark(spark_df, frame_type)
 
-    def load_table_from_warehouse(
-        self,
-        table_name: str,
-        warehouse_name: str,
-        *,
-        schema: str | None = "dbo",
-        workspace_id: str | None = None,
-        frame_type: DataFrameTypeName = "spark",
-    ) -> OutputFrame:
-        warehouse_table = self._resolve_warehouse_table_name(table_name, warehouse_name, schema)
-        logger.debug("Loading warehouse table %s via synapsesql", warehouse_table)
-        constants = _fabric_constants()
-        spark_df = (
-            self._spark()
-            .read.option(
-                constants.WorkspaceId,
-                self._resolve_warehouse_workspace_id(workspace_id),
-            )
-            .synapsesql(warehouse_table)
-        )
-        return from_spark(spark_df, frame_type)
-
     def write_table(self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite") -> None:
         spark = self._spark()
         to_spark(df, spark).write.mode(mode).format("delta").saveAsTable(
@@ -94,25 +72,7 @@ class FabricLakehouse:
     def _spark(self):
         return get_or_create_spark_session()
 
-    def _resolve_warehouse_workspace_id(self, workspace_id: str | None) -> str:
-        resolved = workspace_id if workspace_id is not None else self._workspace_id
-        if resolved is None:
-            raise ValueError("warehouse reads require: workspace_id")
-        return resolved
-
-    def _resolve_warehouse_table_name(
-        self, table_name: str, warehouse_name: str, schema: str | None
-    ) -> str:
-        return ".".join(part for part in [warehouse_name, schema, table_name] if part)
-
     def _notebookutils(self):
         import notebookutils
 
         return notebookutils
-
-
-def _fabric_constants():
-    __import__("com.microsoft.spark.fabric")
-    from com.microsoft.spark.fabric.Constants import Constants
-
-    return Constants

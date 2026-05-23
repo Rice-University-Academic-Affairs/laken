@@ -93,18 +93,6 @@ class LocalLakehouse:
         self._warn_about_cached_table(name)
         return from_arrow(DeltaTable(str(table_dir)).to_pyarrow_table(), frame_type)
 
-    def load_table_from_warehouse(
-        self,
-        table_name: str,
-        warehouse_name: str,
-        *,
-        schema: str | None = "dbo",
-        workspace_id: str | None = None,
-        frame_type: DataFrameTypeName = "pandas",
-    ) -> OutputFrame:
-        _ = table_name, warehouse_name, schema, workspace_id, frame_type
-        raise NotImplementedError("load_table_from_warehouse is only available in Fabric notebooks")
-
     def write_table(self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite") -> None:
         table_dir = self._table_dir(name)
         arrow_table = to_arrow(df)

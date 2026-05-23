@@ -86,61 +86,6 @@ class TestFabricDefaultLakehouse:
         assert result == "result"
 
     @patch("laken.fabric_lakehouse.get_or_create_spark_session")
-    @patch("laken.fabric_lakehouse._fabric_constants")
-    @patch("laken.fabric_lakehouse.FabricLakehouse._notebookutils")
-    def test_load_table_from_warehouse(
-        self,
-        mock_nu_fn,
-        mock_constants_fn,
-        mock_spark_fn,
-        mock_spark,
-        mock_notebookutils,
-    ):
-        constants = MagicMock()
-        constants.WorkspaceId = "workspace-id-option"
-        mock_constants_fn.return_value = constants
-        mock_spark_fn.return_value = mock_spark
-        mock_nu_fn.return_value = mock_notebookutils
-        lh = FabricLakehouse()
-        with patch("laken.fabric_lakehouse.from_spark", return_value="result") as from_spark:
-            result = lh.load_table_from_warehouse(
-                "orders",
-                "SalesWarehouse",
-                frame_type="pandas",
-            )
-        mock_spark.read.option.assert_called_once_with("workspace-id-option", "ws-id-123")
-        mock_spark.read.synapsesql.assert_called_once_with("SalesWarehouse.dbo.orders")
-        from_spark.assert_called_once_with(mock_spark.read.synapsesql.return_value, "pandas")
-        assert result == "result"
-
-    @patch("laken.fabric_lakehouse.get_or_create_spark_session")
-    @patch("laken.fabric_lakehouse._fabric_constants")
-    @patch("laken.fabric_lakehouse.FabricLakehouse._notebookutils")
-    def test_load_table_from_warehouse_custom_workspace_without_schema(
-        self,
-        mock_nu_fn,
-        mock_constants_fn,
-        mock_spark_fn,
-        mock_spark,
-        mock_notebookutils,
-    ):
-        constants = MagicMock()
-        constants.WorkspaceId = "workspace-id-option"
-        mock_constants_fn.return_value = constants
-        mock_spark_fn.return_value = mock_spark
-        mock_nu_fn.return_value = mock_notebookutils
-        lh = FabricLakehouse()
-        with patch("laken.fabric_lakehouse.from_spark", return_value="result"):
-            lh.load_table_from_warehouse(
-                "orders",
-                "SalesWarehouse",
-                schema=None,
-                workspace_id="custom-ws",
-            )
-        mock_spark.read.option.assert_called_once_with("workspace-id-option", "custom-ws")
-        mock_spark.read.synapsesql.assert_called_once_with("SalesWarehouse.orders")
-
-    @patch("laken.fabric_lakehouse.get_or_create_spark_session")
     @patch("laken.fabric_lakehouse.to_spark")
     def test_write_table_delta(self, mock_to_spark, mock_spark_fn, mock_spark):
         mock_spark_fn.return_value = mock_spark
