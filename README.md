@@ -112,13 +112,12 @@ create_analytics(lh)
 
 ### `Lakehouse`
 
-`Lakehouse()` detects whether your code is running on your laptop or in a Fabric
-notebook and connects accordingly. The same `read_table` / `write_table` calls work in
-both places:
+`Lakehouse()` detects whether your code is running locally or in a Fabric notebook and
+connects accordingly. The same `read_table` / `write_table` calls work in both places:
 
-- **On your laptop** — the first read of a Fabric table copies it into a `.laken/`
-  folder on disk; later reads use that copy. Writes update only your local copy; they do
-  not change tables in Fabric.
+- **Locally** — the first read of a Fabric table copies it into a `.laken/` folder on
+  disk; later reads use that copy. Writes update only your local copy; they do not change
+  tables in Fabric.
 - **In a Fabric notebook** — reads and writes go to your attached lakehouse.
 
 ```python
@@ -132,7 +131,7 @@ Use `schema.table` when you need a schema (`marketing.products`). A bare name
 lakehouse.
 
 ```python
-df = lh.read_table("products")                         # pandas on your laptop; Spark in Fabric
+df = lh.read_table("products")                         # pandas locally; Spark in Fabric
 df = lh.read_table("products", frame_type="spark")
 df = lh.read_table("marketing.products", frame_type="polars")
 
@@ -148,13 +147,15 @@ To use a different lakehouse than your `.env` or notebook default:
 lh = Lakehouse(lakehouse="Sales_LH")
 ```
 
-### Fabric tables on your laptop
+### Fabric tables locally
 
-The first time you `read_table` a Fabric table on your laptop, laken downloads a copy
-into `.laken/`. Later reads use that copy until you refresh it.
+The first time you `read_table` a Fabric table locally, laken downloads a copy into
+`.laken/`. Later reads use that copy until you refresh or reset it.
 
 Tables up to **100 MB** in Fabric are copied in full. Larger tables copy only the first
-**10,000 rows** — enough to develop against without downloading the whole table.
+**10,000 rows** — enough to develop against without downloading the whole table. You can
+change both limits with `max_mirror_mb` and `max_sample_rows` on `Lakehouse(...)` or on a
+single `read_table` call:
 
 ```python
 lh = Lakehouse(max_mirror_mb=200, max_sample_rows=5_000)
@@ -163,10 +164,6 @@ lh.read_table("dbo.big_fact", max_mirror_mb=500)
 
 Limits on `Lakehouse(...)` also apply to `laken refresh` and `laken reset`. Limits on a
 single `read_table` call apply only the first time that table is downloaded.
-
-If a table changes in Fabric after you copied it, laken warns you and keeps using your
-local copy. Run `laken refresh <table>` to download the latest data, or `laken reset
-<table>` to discard local edits and re-download from Fabric.
 
 ### CLI
 
@@ -181,9 +178,11 @@ Environment, and starts a publish. Fabric rebuilds the environment in the backgr
 import your package once that finishes. You need a standard Python package layout and a
 Fabric environment with a compatible Python/Spark runtime.
 
-`laken refresh <table>` downloads the table again from Fabric. `laken reset <table>`
-drops your local copy and downloads a fresh one. Both commands only affect tables that
-came from Fabric; tables you created locally are left alone.
+`laken refresh <table>` re-downloads the latest data from Fabric when you still have the
+original copy and have not written to the table locally. `laken reset <table>` discards
+your local copy — including any changes from `write_table` — and downloads a fresh copy
+from Fabric. Both commands only apply to tables that came from Fabric; tables you created
+locally are left alone.
 
 ### Environment variables
 
@@ -191,16 +190,16 @@ When you create a `Lakehouse` or run a `laken` command, laken loads a `.env` fil
 your project root. Variables already set in your shell or CI take precedence. Call
 `load_environment()` yourself only if you need those values earlier.
 
-| Variable | Purpose |
+| Variable | |
 | :--- | :--- |
-| `AZURE_TENANT_ID` | Auth (fetch + deploy) |
-| `AZURE_CLIENT_ID` | Auth (fetch + deploy) |
-| `AZURE_CLIENT_SECRET` | Auth (fetch + deploy) |
-| `FABRIC_WORKSPACE_NAME` | Local Fabric fetch (all four name/ID vars required) |
-| `FABRIC_LAKEHOUSE_NAME` | Local Fabric fetch |
-| `FABRIC_WORKSPACE_ID` | OneLake paths; required for deploy |
-| `FABRIC_LAKEHOUSE_ID` | OneLake paths; required for local Fabric fetch |
-| `FABRIC_ENVIRONMENT_ID` | Deploy target |
+| `AZURE_TENANT_ID` | Azure AD tenant ID for your service principal |
+| `AZURE_CLIENT_ID` | Application (client) ID of the service principal |
+| `AZURE_CLIENT_SECRET` | Client secret for the service principal |
+| `FABRIC_WORKSPACE_NAME` | Fabric workspace display name (required locally, with the other three name/ID vars) |
+| `FABRIC_LAKEHOUSE_NAME` | Lakehouse display name to read from locally |
+| `FABRIC_WORKSPACE_ID` | Workspace GUID for OneLake paths and deploy |
+| `FABRIC_LAKEHOUSE_ID` | Lakehouse GUID for OneLake paths when reading locally |
+| `FABRIC_ENVIRONMENT_ID` | Fabric Environment that `laken deploy` publishes to |
 
 `AZURE_*` values come from an Azure service principal. In a Fabric notebook you can copy
 the Fabric variables from context:
