@@ -206,19 +206,6 @@ from laken.local_lakehouse import LocalLakehouse
 
 ## Development
 
-This repository is the **laken** library itself:
-
-```
-laken/
-├── pyproject.toml
-├── src/laken/              # Lakehouse, local cache, Fabric, deploy CLI
-│   ├── lakehouse.py
-│   ├── local_lakehouse.py
-│   ├── fabric_lakehouse.py
-│   └── deploy/
-└── tests/                  # mirrors src; tests/deploy/ for deploy CLI
-```
-
 ```bash
 uv sync
 uv run pytest
