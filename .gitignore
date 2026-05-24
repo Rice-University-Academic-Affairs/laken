@@ -15,3 +15,4 @@ lakehouse/
 .metastore_db/
 derby.log
 .env
+.laken/
