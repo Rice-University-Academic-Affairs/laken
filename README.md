@@ -152,8 +152,8 @@ lh = Lakehouse(lakehouse="Sales_LH")
 The first time you `read_table` a Fabric table locally, laken downloads a copy into
 `.laken/`. Later reads use that copy.
 
-`write_table` updates only that local copy — nothing is sent to Fabric. If the table came
-from Fabric, your edits stay on disk until you explicitly re-download from Fabric.
+`write_table` updates only that local copy — nothing is sent to Fabric. Run
+`laken refresh <table>` to discard local changes and download the table from Fabric again.
 
 Tables up to **100 MB** in Fabric are copied in full. Larger tables copy only the first
 **10,000 rows** — enough to develop against without downloading the whole table. You can
@@ -170,24 +170,15 @@ lh.read_table("dbo.big_fact", max_mirror_mb=500)
 ```text
 laken deploy [--workspace-id <id>] [--environment-id <id>]
 laken refresh <table>
-laken reset <table>
 ```
 
 `laken deploy` builds your project wheel from `pyproject.toml`, uploads it to a Fabric
 Environment, and starts a publish. Fabric rebuilds the environment in the background;
 import your package once that finishes.
 
-For tables you copied from Fabric, there are two ways to pull from Fabric again:
-
-- **`laken refresh <table>`** — Fabric has newer data and your local copy is still the
-  untouched download (you have not called `write_table` on it). Replaces your local copy
-  with what is in Fabric now.
-- **`laken reset <table>`** — You called `write_table` and want to discard your local
-  changes, or you want to wipe the local copy and download from Fabric again regardless.
-  Always replaces your local copy for tables that came from Fabric.
-
-`refresh` and `reset` do nothing for tables you created locally that were never copied
-from Fabric.
+`laken refresh <table>` replaces your local copy with the current table from Fabric. Use
+it when Fabric has newer data or when you want to undo local `write_table` changes.
+Tables you created locally that were never copied from Fabric are left alone.
 
 ### Environment variables
 

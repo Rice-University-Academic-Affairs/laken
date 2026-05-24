@@ -18,14 +18,6 @@ def test_refresh_command(mock_refresh):
     mock_refresh.assert_called_once_with("raw_faculty")
 
 
-@patch("laken.cli.reset_table")
-def test_reset_command(mock_reset):
-    result = runner.invoke(app, ["reset", "raw_faculty"])
-
-    assert result.exit_code == 0
-    mock_reset.assert_called_once_with("raw_faculty")
-
-
 @patch("laken.cli.refresh_table")
 def test_refresh_command_surfaces_errors(mock_refresh):
     mock_refresh.side_effect = FileNotFoundError("table not found: x")
