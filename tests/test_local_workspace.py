@@ -225,6 +225,31 @@ def test_read_three_part_name_raises(tmp_path):
         lakehouse.read_table("MyWorkspace.Sales_LH.products", frame_type="pandas")
 
 
+def test_read_rehydrates_when_delta_exists_without_metadata(tmp_path):
+    root = tmp_path / ".laken" / "workspace"
+    fetcher = FakeFabricFetcher()
+    fetcher.add("raw_faculty", pa.table({"id": [1]}), version=1, size_bytes=100)
+    lakehouse = LocalLakehouse(root=root, fabric_fetcher=fetcher)
+    lakehouse.read_table("raw_faculty", frame_type="pandas")
+    fetcher.add("raw_faculty", pa.table({"id": [2]}), version=2, size_bytes=100)
+    lakehouse._metadata.remove("raw_faculty")
+
+    result = lakehouse.read_table("raw_faculty", frame_type="pandas")
+
+    assert result["id"].tolist() == [2]
+
+
+def test_read_uses_orphan_local_delta_when_metadata_missing(tmp_path):
+    root = tmp_path / ".laken" / "workspace"
+    lakehouse = LocalLakehouse(root=root)
+    lakehouse.write_table(pd.DataFrame({"id": [1]}), "local_only")
+    lakehouse._metadata.remove("local_only")
+
+    result = lakehouse.read_table("local_only", frame_type="pandas")
+
+    assert result["id"].tolist() == [1]
+
+
 def test_purge_removes_mirror_metadata(tmp_path):
     root = tmp_path / ".laken" / "workspace"
     fetcher = FakeFabricFetcher()

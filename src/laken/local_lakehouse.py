@@ -47,7 +47,6 @@ class LocalLakehouse:
         self._lakehouse_id = lakehouse_id or os.getenv("FABRIC_LAKEHOUSE_ID")
         self._workspace_id = workspace_id or os.getenv("FABRIC_WORKSPACE_ID")
         self._workspace_name = workspace_name or os.getenv("FABRIC_WORKSPACE_NAME")
-        self._fabric_fetcher_arg = fabric_fetcher
         self._fabric_fetcher_resolved = fabric_fetcher is not None
         self._fabric_fetcher = fabric_fetcher
         self._max_mirror_mb = max_mirror_mb
@@ -72,17 +71,28 @@ class LocalLakehouse:
         max_sample_rows: int | None = None,
     ) -> OutputFrame:
         table_dir = self._table_dir(name)
-        if not (table_dir / "_delta_log").is_dir():
+        key = self._table_key(name)
+        entry = self._metadata.table(key)
+        has_delta = (table_dir / "_delta_log").is_dir()
+        if not has_delta:
             logger.debug("No local Delta cache for %s", name)
             self._hydrate_table(
                 name,
                 max_mirror_mb=max_mirror_mb,
                 max_sample_rows=max_sample_rows,
             )
+        elif entry is None:
+            if self._resolve_fabric_fetcher() is not None:
+                logger.debug("Re-hydrating %s from Fabric (cache without metadata)", name)
+                self._hydrate_table(
+                    name,
+                    max_mirror_mb=max_mirror_mb,
+                    max_sample_rows=max_sample_rows,
+                )
+            else:
+                logger.debug("Reading %s from local Delta cache (no metadata)", name)
         else:
-            key = self._table_key(name)
-            entry = self._metadata.table(key)
-            state = entry.get("state", "local") if entry is not None else "local"
+            state = entry.get("state", "local")
             logger.debug("Reading %s from local Delta cache (state=%s)", name, state)
         self._log_sample_notice(name)
         return from_arrow(DeltaTable(str(table_dir)).to_pyarrow_table(), frame_type)
@@ -118,6 +128,10 @@ class LocalLakehouse:
         key = self._table_key(name)
         entry = self._metadata.table(key)
         if entry is None:
+            table_dir = self._table_dir(name)
+            if (table_dir / "_delta_log").is_dir() and self._resolve_fabric_fetcher() is not None:
+                self._hydrate_table(name)
+                return
             raise FileNotFoundError(f"table not found: {name}")
         if entry.get("state") == "local":
             logger.info("%s is local-only and has no Fabric source to refresh.", key)
@@ -251,6 +265,7 @@ class LocalLakehouse:
                 "cache": {
                     "mode": "sample",
                     "remote_size_bytes": remote_size_bytes,
+                    "max_mirror_mb": max_mirror_mb,
                     "max_sample_rows": max_sample_rows,
                     "fetched_at": utc_timestamp(),
                 },
@@ -266,6 +281,8 @@ class LocalLakehouse:
             "source": self._source_from_info(info),
             "cache": {
                 "mode": "full",
+                "max_mirror_mb": max_mirror_mb,
+                "max_sample_rows": max_sample_rows,
                 "fetched_at": utc_timestamp(),
                 "remote_size_bytes": remote_size_bytes,
             },

@@ -14,7 +14,6 @@ from laken.table_names import (
 from laken.workspace import FabricTableInfo
 
 ONELAKE_SCOPE = "https://storage.azure.com/.default"
-FABRIC_API_SCOPE = "https://api.fabric.microsoft.com/.default"
 REQUEST_TIMEOUT_SECONDS = 60
 TOKEN_CACHE_SECONDS = 3000
 _token_cache: dict[str, tuple[str, float]] = {}
