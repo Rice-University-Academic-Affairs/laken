@@ -1,5 +1,5 @@
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from packaging.version import Version
 from typer.testing import CliRunner
@@ -9,25 +9,22 @@ from laken.cli import app
 runner = CliRunner()
 
 
-def test_deploy_uploads_wheel_from_build_not_dist_resolution(tmp_path, monkeypatch):
-    dist = tmp_path / "dist"
-    dist.mkdir()
-    built = dist / "laken-2.0.0-py3-none-any.whl"
+def test_deploy_uploads_built_wheel(tmp_path, monkeypatch):
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'laken'\nversion = '2.0.0'\n")
+    built = tmp_path / "dist" / "laken-2.0.0-py3-none-any.whl"
+    built.parent.mkdir()
     built.write_bytes(b"built")
-    (dist / "laken-9.0.0-py3-none-any.whl").write_bytes(b"stale")
+    (tmp_path / "dist" / "laken-9.0.0-py3-none-any.whl").write_bytes(b"stale")
     monkeypatch.chdir(tmp_path)
-    metadata = MagicMock()
-    metadata.name = "laken"
-    uploaded: list[Path | None] = []
+    uploaded: list[Path] = []
 
-    def capture_upload(*_args, wheel_path=None, **_kwargs):
+    def capture_publish(*, config, wheel_path):
         uploaded.append(wheel_path)
 
     with (
-        patch("laken.cli._build_project", return_value=(metadata, built, Version("2.0.0"))),
-        patch("laken.cli._upload_project", side_effect=capture_upload),
+        patch("laken.cli.build_wheel", return_value=(built, Version("2.0.0"))),
         patch("laken.cli.load_deploy_config"),
-        patch("laken.cli.publish_wheel"),
+        patch("laken.cli.publish_wheel", side_effect=capture_publish),
     ):
         result = runner.invoke(app, ["deploy"])
 

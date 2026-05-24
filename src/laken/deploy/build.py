@@ -1,21 +1,37 @@
 import subprocess
 from pathlib import Path
 
-from laken.deploy.wheel import _collect_matches, _normalize_name, _parse_wheel
+from packaging.utils import parse_wheel_filename
+from packaging.version import InvalidVersion, Version
 
 
-def run_build(project_name: str) -> None:
-    dist = Path.cwd() / "dist"
-    if dist.is_dir():
-        normalized = _normalize_name(project_name)
-        for wheel in dist.glob("*.whl"):
-            parsed = _parse_wheel(wheel)
-            if parsed is not None and _normalize_name(parsed[0]) == normalized:
-                wheel.unlink()
-    subprocess.run(["uv", "build"], cwd=Path.cwd(), check=True)
-    if len(_collect_matches(project_name)) != 1:
-        matches = _collect_matches(project_name)
-        count = len(matches)
-        raise RuntimeError(
-            f"Expected one wheel for {project_name!r} in dist/ after build, found {count}"
-        )
+def build_wheel() -> tuple[Path, Version]:
+    root = Path.cwd()
+    dist = root / "dist"
+    dist.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "uv",
+            "build",
+            "-q",
+            "--no-build-logs",
+            "--wheel",
+            "--clear",
+            "-o",
+            str(dist),
+        ],
+        cwd=root,
+        check=True,
+    )
+    wheels = list(dist.glob("*.whl"))
+    if len(wheels) != 1:
+        count = len(wheels)
+        raise FileNotFoundError(f"Expected one wheel in {dist}, found {count}")
+    path = wheels[0]
+    _, version, _, _ = parse_wheel_filename(path.name)
+    if isinstance(version, Version):
+        return path, version
+    try:
+        return path, Version(str(version))
+    except InvalidVersion as exc:
+        raise RuntimeError(f"Invalid version in wheel name {path.name}") from exc
