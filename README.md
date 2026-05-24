@@ -112,8 +112,14 @@ create_analytics(lh)
 
 ### `Lakehouse`
 
-`Lakehouse()` auto-detects Fabric notebook context; on your laptop it reads and writes
-through a local Delta cache under `.laken/`.
+`Lakehouse()` detects whether your code is running on your laptop or in a Fabric
+notebook and connects accordingly. The same `read_table` / `write_table` calls work in
+both places:
+
+- **On your laptop** — the first read of a Fabric table copies it into a `.laken/`
+  folder on disk; later reads use that copy. Writes update only your local copy; they do
+  not change tables in Fabric.
+- **In a Fabric notebook** — reads and writes go to your attached lakehouse.
 
 ```python
 from laken import Lakehouse
@@ -121,12 +127,12 @@ from laken import Lakehouse
 lh = Lakehouse()
 ```
 
-Use `schema.table` for a schema; a bare name is passed through to Spark and Fabric
-resolves it (typically `dbo` on a schema-enabled lakehouse). `write_table` accepts
-`mode="overwrite"` (default) or `"append"`.
+Use `schema.table` when you need a schema (`marketing.products`). A bare name
+(`products`) is resolved by Fabric/Spark, usually as `dbo.products` on a schema-enabled
+lakehouse.
 
 ```python
-df = lh.read_table("products")                         # pandas locally; Spark in Fabric
+df = lh.read_table("products")                         # pandas on your laptop; Spark in Fabric
 df = lh.read_table("products", frame_type="spark")
 df = lh.read_table("marketing.products", frame_type="polars")
 
@@ -134,45 +140,33 @@ lh.write_table(df, "products")
 lh.write_table(df, "marketing.products", mode="append")
 ```
 
-Override the default lakehouse (from notebook context in Fabric, or from `.env` locally):
+`write_table` replaces a table by default; pass `mode="append"` to add rows.
+
+To use a different lakehouse than your `.env` or notebook default:
 
 ```python
 lh = Lakehouse(lakehouse="Sales_LH")
 ```
 
-For unit tests, construct `LocalLakehouse` with a test fetcher:
+### Fabric tables on your laptop
 
-```python
-from laken.local_lakehouse import LocalLakehouse
-```
+The first time you `read_table` a Fabric table on your laptop, laken downloads a copy
+into `.laken/`. Later reads use that copy until you refresh it.
 
-### Local vs Fabric
-
-| | Local | Fabric notebook |
-| :--- | :--- | :--- |
-| Reads | First read pulls from OneLake into `.laken/`; later reads use the cache | Attached lakehouse |
-| Writes | `.laken/` only — not synced to Fabric | Persist to the attached lakehouse |
-
-`Lakehouse` delegates to `LocalLakehouse` or `FabricLakehouse` internally. Import
-`LocalLakehouse` from `laken.local_lakehouse` in tests; you rarely need
-`FabricLakehouse` directly.
-
-### Local Fabric cache
-
-The first `read_table` of a Fabric-backed name locally downloads Delta into `.laken/`.
-By default, tables **100 MB or smaller** on Fabric (from the Delta log) are mirrored in
-full; larger tables cache the first **10,000 rows** only.
+Tables up to **100 MB** in Fabric are copied in full. Larger tables copy only the first
+**10,000 rows** — enough to develop against without downloading the whole table.
 
 ```python
 lh = Lakehouse(max_mirror_mb=200, max_sample_rows=5_000)
 lh.read_table("dbo.big_fact", max_mirror_mb=500)
 ```
 
-Limits on `Lakehouse(...)` apply to `laken refresh` and `laken reset`. Limits passed to
-`read_table` apply only on the first download for that table.
+Limits on `Lakehouse(...)` also apply to `laken refresh` and `laken reset`. Limits on a
+single `read_table` call apply only the first time that table is downloaded.
 
-If Fabric data changes after you cached, laken warns and keeps your local copy. Run
-`laken refresh <table>` to pull the latest version.
+If a table changes in Fabric after you copied it, laken warns you and keeps using your
+local copy. Run `laken refresh <table>` to download the latest data, or `laken reset
+<table>` to discard local edits and re-download from Fabric.
 
 ### CLI
 
@@ -182,20 +176,20 @@ laken refresh <table>
 laken reset <table>
 ```
 
-`laken deploy` builds the wheel from `pyproject.toml` at the repo root, uploads it to a
-Fabric Environment, and submits a publish. Fabric rebuilds the environment asynchronously;
-import your package after publish completes. You need a buildable application wheel and a
+`laken deploy` builds your project wheel from `pyproject.toml`, uploads it to a Fabric
+Environment, and starts a publish. Fabric rebuilds the environment in the background;
+import your package once that finishes. You need a standard Python package layout and a
 Fabric environment with a compatible Python/Spark runtime.
 
-`laken refresh <table>` re-downloads from Fabric when the table was originally cached
-from Fabric. `laken reset <table>` discards local changes and re-fetches; the table must
-have been cached from Fabric first. Local-only tables are unchanged by both commands.
+`laken refresh <table>` downloads the table again from Fabric. `laken reset <table>`
+drops your local copy and downloads a fresh one. Both commands only affect tables that
+came from Fabric; tables you created locally are left alone.
 
 ### Environment variables
 
-Root `.env` is loaded when you construct `Lakehouse` or run the `laken` CLI. Shell and CI
-variables take precedence over `.env` values. Call `load_environment()` yourself only if you
-need env vars before creating a lakehouse instance.
+When you create a `Lakehouse` or run a `laken` command, laken loads a `.env` file from
+your project root. Variables already set in your shell or CI take precedence. Call
+`load_environment()` yourself only if you need those values earlier.
 
 | Variable | Purpose |
 | :--- | :--- |
