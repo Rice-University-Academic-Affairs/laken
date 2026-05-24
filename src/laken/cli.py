@@ -26,7 +26,7 @@ def deploy(
         metadata = read_project_metadata()
         config = load_deploy_config(workspace_id, environment_id)
         try:
-            wheel_path, wheel_version = build_wheel(metadata.name)
+            wheel_path, wheel_version = build_wheel()
         except subprocess.CalledProcessError as exc:
             raise typer.Exit(exc.returncode or 1) from exc
         typer.echo(f"Built {wheel_path.name}")
