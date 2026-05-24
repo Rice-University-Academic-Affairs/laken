@@ -96,26 +96,16 @@ class TestFabricLakehouseWrite:
         result = fabric_lakehouse.read_table(scratch, frame_type="pandas")
         assert len(result) == 2
 
-    def test_reset_restores_fabric_mirror(
+    def test_refresh_after_write_restores_fabric_mirror(
         self, fabric_lakehouse, clean_integration_table, local_row_pandas
     ):
         fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
         fabric_lakehouse.write_table(local_row_pandas, INTEGRATION_TABLE)
-        fabric_lakehouse._reset_table(INTEGRATION_TABLE)
+        fabric_lakehouse._refresh_table(INTEGRATION_TABLE)
         result = fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
         assert_frame_matches_spec(result)
         entry = _metadata_tables(fabric_lakehouse._root)[INTEGRATION_TABLE]
         assert entry["state"] == "mirror"
-
-    def test_refresh_local_only_is_noop(
-        self, fabric_lakehouse, clean_integration_table, local_row_pandas, capture_laken_logs
-    ):
-        fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
-        fabric_lakehouse.write_table(local_row_pandas, INTEGRATION_TABLE)
-        start = len(capture_laken_logs.records)
-        fabric_lakehouse._refresh_table(INTEGRATION_TABLE)
-        messages = [record.message for record in capture_laken_logs.records[start:]]
-        assert any("local-only" in message for message in messages)
 
     def test_purge_removes_local_cache(self, fabric_lakehouse, clean_integration_table):
         fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")

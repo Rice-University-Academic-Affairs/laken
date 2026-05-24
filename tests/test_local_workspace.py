@@ -73,7 +73,7 @@ def test_large_table_hydrates_fixed_sample(tmp_path, capture_laken_logs):
     assert "Caching a 3-row development sample instead." in capture_laken_logs.text
 
 
-def test_write_to_mirror_converts_to_local_and_reset_restores_fabric(tmp_path, capture_laken_logs):
+def test_write_to_mirror_converts_to_local_and_refresh_restores_fabric(tmp_path, capture_laken_logs):
     root = tmp_path / ".laken" / "workspace"
     fetcher = FakeFabricFetcher()
     fetcher.add("raw_faculty", pa.table({"id": [1]}), version=1, size_bytes=100)
@@ -90,11 +90,6 @@ def test_write_to_mirror_converts_to_local_and_reset_restores_fabric(tmp_path, c
 
     fetcher.add("raw_faculty", pa.table({"id": [2]}), version=2, size_bytes=100)
     lakehouse._refresh_table("raw_faculty")
-
-    assert lakehouse.read_table("raw_faculty", frame_type="pandas")["id"].tolist() == [99]
-    assert "local-only and has no Fabric source to refresh" in capture_laken_logs.text
-
-    lakehouse._reset_table("raw_faculty")
 
     assert lakehouse.read_table("raw_faculty", frame_type="pandas")["id"].tolist() == [2]
     assert _metadata(root)["raw_faculty"]["state"] == "mirror"
@@ -174,12 +169,14 @@ def test_refresh_missing_table_raises(tmp_path):
         lakehouse._refresh_table("missing")
 
 
-def test_reset_without_fabric_source_raises(tmp_path):
+def test_refresh_without_fabric_source_is_noop(tmp_path, capture_laken_logs):
     root = tmp_path / ".laken" / "workspace"
     lakehouse = LocalLakehouse(root=root)
     lakehouse.write_table(pd.DataFrame({"id": [1]}), "local_only")
-    with pytest.raises(ValueError, match="has no Fabric source to reset"):
-        lakehouse._reset_table("local_only")
+    capture_laken_logs.clear()
+    lakehouse._refresh_table("local_only")
+    assert "has no Fabric source to refresh" in capture_laken_logs.text
+    assert lakehouse.read_table("local_only", frame_type="pandas")["id"].tolist() == [1]
 
 
 def test_cache_boundary_at_max_mirror_mb_uses_mirror(tmp_path):

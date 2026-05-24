@@ -108,7 +108,7 @@ class LocalLakehouse:
             logger.info("%s was a Fabric-backed mirror.", key)
             logger.info(
                 "This write converts it to a local table. "
-                "It will not be refreshed from Fabric unless reset."
+                "Run laken refresh to replace this copy from Fabric."
             )
         if mode == "overwrite" or not (table_dir / "_delta_log").is_dir():
             self._write_delta_table(table_dir, arrow_table)
@@ -133,12 +133,10 @@ class LocalLakehouse:
                 self._hydrate_table(name)
                 return
             raise FileNotFoundError(f"table not found: {name}")
-        if entry.get("state") == "local":
-            logger.info("%s is local-only and has no Fabric source to refresh.", key)
-            return
         source = entry.get("source")
         if source is None:
-            raise ValueError(f"table has no Fabric source: {key}")
+            logger.info("%s has no Fabric source to refresh.", key)
+            return
         cache_mb, cache_rows, force_sample = self._stored_cache_policy(entry)
         refreshed = self._fetch_and_cache(
             name,
@@ -149,23 +147,6 @@ class LocalLakehouse:
         )
         version = refreshed.get("source", {}).get("delta_version")
         logger.info("Refreshed %s from Fabric version %s.", key, version)
-
-    def _reset_table(self, name: str) -> None:
-        key = self._table_key(name)
-        entry = self._metadata.table(key)
-        if entry is None or entry.get("source") is None:
-            raise ValueError(f"laken: {key} has no Fabric source to reset.")
-        source = entry["source"]
-        cache_mb, cache_rows, force_sample = self._stored_cache_policy(entry)
-        reset = self._fetch_and_cache(
-            name,
-            source.get("table", name),
-            max_mirror_mb=cache_mb,
-            max_sample_rows=cache_rows,
-            force_sample=force_sample,
-        )
-        version = reset.get("source", {}).get("delta_version")
-        logger.info("Reset %s to Fabric version %s.", key, version)
 
     def _table_ref(self, name: str) -> TableRef:
         return parse_table_ref(name)
@@ -372,10 +353,6 @@ class LocalLakehouse:
 
 def refresh_table(name: str) -> None:
     LocalLakehouse()._refresh_table(name)
-
-
-def reset_table(name: str) -> None:
-    LocalLakehouse()._reset_table(name)
 
 
 def _format_bytes(size_bytes: int) -> str:
