@@ -241,7 +241,8 @@ class LocalLakehouse:
         if fabric_fetcher is None:
             raise FileNotFoundError(f"table not found: {local_name}")
         try:
-            info = fabric_fetcher.inspect_table(fetch_name)
+            session = fabric_fetcher.open_table(fetch_name)
+            info = session.inspect()
         except TableNotFoundError as err:
             raise FileNotFoundError(f"table not found: {local_name}") from err
         table_dir = self._table_dir(local_name)
@@ -256,7 +257,7 @@ class LocalLakehouse:
                 max_mirror_mb,
             )
             logger.info("Caching a %s-row development sample instead.", f"{max_sample_rows:,}")
-            arrow_table = fabric_fetcher.fetch_table(fetch_name, max_rows=max_sample_rows)
+            arrow_table = session.fetch(max_rows=max_sample_rows)
             self._write_delta_table(table_dir, arrow_table)
             entry = {
                 "state": "sample",
@@ -273,7 +274,7 @@ class LocalLakehouse:
             self._metadata.upsert(key, entry)
             return entry
         logger.info("Fetching %s from Fabric...", key)
-        arrow_table = fabric_fetcher.fetch_table(fetch_name, max_rows=None)
+        arrow_table = session.fetch(max_rows=None)
         self._write_delta_table(table_dir, arrow_table)
         entry = {
             "state": "mirror",

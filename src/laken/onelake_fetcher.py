@@ -34,26 +34,19 @@ class OneLakeFabricFetcher:
         self._lakehouse_id = lakehouse_id
 
     def inspect_table(self, name: str) -> FabricTableInfo:
-        ref, fabric_name = self._resolve_fetch_target(name)
-        delta_table = self._delta_table(ref)
-        actions = delta_table.get_add_actions()
-        size_bytes = sum(
-            value for value in actions.column("size_bytes").to_pylist() if value is not None
-        )
-        return FabricTableInfo(
-            table=fabric_name,
-            delta_version=delta_table.version(),
-            workspace_id=self._workspace_id,
-            lakehouse_id=self._lakehouse_id,
-            size_bytes=size_bytes,
-        )
+        return self.open_table(name).inspect()
 
     def fetch_table(self, name: str, *, max_rows: int | None = None) -> pa.Table:
-        ref, _ = self._resolve_fetch_target(name)
-        delta_table = self._delta_table(ref)
-        if max_rows is None:
-            return delta_table.to_pyarrow_table()
-        return delta_table.to_pyarrow_dataset().head(max_rows)
+        return self.open_table(name).fetch(max_rows=max_rows)
+
+    def open_table(self, name: str) -> "_OneLakeFabricTableSession":
+        ref, fabric_name = self._resolve_fetch_target(name)
+        return _OneLakeFabricTableSession(
+            self._delta_table(ref),
+            fabric_name,
+            workspace_id=self._workspace_id,
+            lakehouse_id=self._lakehouse_id,
+        )
 
     def _fabric_table_name(self, ref: TableRef) -> str:
         return format_fabric_table_name(
@@ -80,6 +73,39 @@ class OneLakeFabricFetcher:
             ),
             storage_options=_storage_options(),
         )
+
+
+class _OneLakeFabricTableSession:
+    def __init__(
+        self,
+        delta_table: DeltaTable,
+        fabric_name: str,
+        *,
+        workspace_id: str,
+        lakehouse_id: str,
+    ):
+        self._delta_table = delta_table
+        self._fabric_name = fabric_name
+        self._workspace_id = workspace_id
+        self._lakehouse_id = lakehouse_id
+
+    def inspect(self) -> FabricTableInfo:
+        actions = self._delta_table.get_add_actions()
+        size_bytes = sum(
+            value for value in actions.column("size_bytes").to_pylist() if value is not None
+        )
+        return FabricTableInfo(
+            table=self._fabric_name,
+            delta_version=self._delta_table.version(),
+            workspace_id=self._workspace_id,
+            lakehouse_id=self._lakehouse_id,
+            size_bytes=size_bytes,
+        )
+
+    def fetch(self, *, max_rows: int | None = None) -> pa.Table:
+        if max_rows is None:
+            return self._delta_table.to_pyarrow_table()
+        return self._delta_table.to_pyarrow_dataset().head(max_rows)
 
 
 def default_fabric_fetcher(

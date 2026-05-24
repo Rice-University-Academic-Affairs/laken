@@ -320,6 +320,7 @@ def test_refresh_uses_stored_fabric_source_table(tmp_path):
 
     lakehouse.read_table("marketing.products", frame_type="pandas")
     assert _metadata(root)["marketing.products"]["source"]["table"] == fabric_name
+    fetcher.open_names.clear()
     fetcher.inspect_names.clear()
     fetcher.fetch_names.clear()
     fetcher.max_rows.clear()
@@ -327,6 +328,7 @@ def test_refresh_uses_stored_fabric_source_table(tmp_path):
 
     lakehouse._refresh_table("marketing.products")
 
+    assert fetcher.open_names == [fabric_name]
     assert fetcher.inspect_names == [fabric_name]
     assert fetcher.fetch_names == [fabric_name]
     assert _metadata(root)["marketing.products"]["source"]["delta_version"] == 2
