@@ -43,7 +43,11 @@ wheel before publishing to a Fabric environment.
 
 ## Quickstart
 
-**1. Credentials** — create a `.env` in your project root:
+Write lakehouse code on your laptop against real Fabric data, package it, and run the
+same code in a notebook.
+
+**1. Credentials** — create a `.env` in your project root (see
+[Environment variables](#environment-variables) for the full list):
 
 ```env
 AZURE_TENANT_ID=...
@@ -55,7 +59,9 @@ FABRIC_WORKSPACE_ID=...
 FABRIC_LAKEHOUSE_ID=...
 ```
 
-**2. Develop locally** — first `read_table` pulls from Fabric and caches Delta under `.laken/`:
+**2. Develop locally** — on your laptop the first `read_table` pulls from Fabric and
+caches Delta under `.laken/`. In a Fabric notebook the same code runs against your
+attached lakehouse (Spark by default):
 
 ```python
 from laken import Lakehouse
@@ -65,22 +71,39 @@ df = lh.read_table("customers", frame_type="pandas")
 lh.write_table(df, "customer_analytics")
 ```
 
-In a Fabric notebook, the same calls use your attached lakehouse (Spark by default).
+**3. Package and deploy** — move that logic into a normal Python package and publish it
+to a Fabric Environment (`FABRIC_ENVIRONMENT_ID` in `.env`):
 
-**3. Package and deploy** — standard `src/` layout plus `FABRIC_ENVIRONMENT_ID` in `.env`:
+```
+customer_analytics/
+├── pyproject.toml
+├── .env
+└── src/customer_analytics/
+    └── pipeline.py
+```
+
+```python
+# src/customer_analytics/pipeline.py
+from laken import Lakehouse
+
+
+def create_analytics(lh: Lakehouse) -> None:
+    df = lh.read_table("customers", frame_type="pandas")
+    lh.write_table(df, "customer_analytics")
+```
 
 ```bash
 laken deploy
 ```
 
-**4. Run in a notebook:**
+**4. Run in a notebook** — after the environment publish finishes:
 
 ```python
 from laken import Lakehouse
-from myapp.pipeline import run_pipeline
+from customer_analytics.pipeline import create_analytics
 
 lh = Lakehouse()
-run_pipeline(lh)
+create_analytics(lh)
 ```
 
 ---
@@ -182,6 +205,19 @@ from laken.local_lakehouse import LocalLakehouse
 ---
 
 ## Development
+
+This repository is the **laken** library itself:
+
+```
+laken/
+├── pyproject.toml
+├── src/laken/              # Lakehouse, local cache, Fabric, deploy CLI
+│   ├── lakehouse.py
+│   ├── local_lakehouse.py
+│   ├── fabric_lakehouse.py
+│   └── deploy/
+└── tests/                  # mirrors src; tests/deploy/ for deploy CLI
+```
 
 ```bash
 uv sync
