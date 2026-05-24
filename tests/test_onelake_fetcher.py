@@ -144,6 +144,41 @@ def test_onelake_fetcher_uses_oauth_and_fabric_delta(mock_post, mock_delta, monk
 
 @patch("laken.onelake_fetcher.DeltaTable")
 @patch("laken.onelake_fetcher.requests.post")
+def test_open_table_inspect_then_fetch_single_delta_init(mock_post, mock_delta, monkeypatch):
+    monkeypatch.setenv("AZURE_TENANT_ID", "tenant-id")
+    monkeypatch.setenv("AZURE_CLIENT_ID", "client-id")
+    monkeypatch.setenv("AZURE_CLIENT_SECRET", "client-secret")
+    mock_post.return_value.raise_for_status.return_value = None
+    mock_post.return_value.json.return_value = {"access_token": "tok"}
+    mock_dt = mock_delta.return_value
+    mock_dt.version.return_value = 9
+    mock_dt.get_add_actions.return_value = pa.table(
+        {
+            "path": ["part.parquet"],
+            "size_bytes": [1234],
+            "modification_time": [0],
+            "num_records": [2],
+        }
+    )
+    mock_dt.to_pyarrow_table.return_value = pa.table({"id": [1, 2]})
+
+    fetcher = OneLakeFabricFetcher(
+        workspace_name="WS",
+        lakehouse="LH",
+        workspace_id="ws-id",
+        lakehouse_id="lh-id",
+    )
+    session = fetcher.open_table("marketing.products")
+    info = session.inspect()
+    table = session.fetch(max_rows=None)
+
+    assert mock_delta.call_count == 1
+    assert info.size_bytes == 1234
+    assert table.num_rows == 2
+
+
+@patch("laken.onelake_fetcher.DeltaTable")
+@patch("laken.onelake_fetcher.requests.post")
 def test_onelake_fetcher_full_mirror_uses_to_pyarrow_table(mock_post, mock_delta, monkeypatch):
     monkeypatch.setenv("AZURE_TENANT_ID", "tenant-id")
     monkeypatch.setenv("AZURE_CLIENT_ID", "client-id")

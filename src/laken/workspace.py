@@ -24,10 +24,18 @@ class FabricTableInfo:
     size_bytes: int | None = None
 
 
+class FabricTableSession(Protocol):
+    def inspect(self) -> FabricTableInfo: ...
+
+    def fetch(self, *, max_rows: int | None = None) -> pa.Table: ...
+
+
 class FabricTableFetcher(Protocol):
     def inspect_table(self, name: str) -> FabricTableInfo: ...
 
     def fetch_table(self, name: str, *, max_rows: int | None = None) -> pa.Table: ...
+
+    def open_table(self, name: str) -> FabricTableSession: ...
 
 
 class TableMetadataStore:
