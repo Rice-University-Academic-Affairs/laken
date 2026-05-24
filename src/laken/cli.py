@@ -69,10 +69,9 @@ def _build_project() -> tuple[ProjectMetadata, Path, Version]:
     require_project_root()
     metadata = read_project_metadata()
     try:
-        run_build(metadata.name)
+        wheel_path, wheel_version = run_build(metadata.name)
     except subprocess.CalledProcessError as exc:
         raise typer.Exit(exc.returncode or 1) from exc
-    wheel_path, wheel_version = wheel_from_build(metadata.name)
     typer.echo(f"Built wheel: {wheel_path}")
     return metadata, wheel_path, wheel_version
 
