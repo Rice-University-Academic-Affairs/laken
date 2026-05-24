@@ -93,7 +93,7 @@ def create_analytics(lh: Lakehouse) -> None:
 ```
 
 ```bash
-laken deploy
+uv run laken deploy
 ```
 
 **4. Run in a Fabric notebook** — after the publish finishes:
@@ -168,8 +168,8 @@ lh.read_table("dbo.big_fact", max_mirror_mb=500)
 ### CLI
 
 ```text
-laken deploy [--workspace-id <id>] [--environment-id <id>]
-laken refresh <table>
+uv run laken deploy [--workspace-id <id>] [--environment-id <id>]
+uv run laken refresh <table>
 ```
 
 `laken deploy` builds your project wheel from `pyproject.toml`, uploads it to a Fabric
