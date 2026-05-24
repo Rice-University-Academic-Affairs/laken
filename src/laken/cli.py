@@ -13,7 +13,7 @@ from laken.deploy.config import load_deploy_config, require_project_root
 from laken.deploy.fabric_client import publish_wheel
 from laken.deploy.project import ProjectMetadata, read_project_metadata
 from laken.deploy.wheel import wheel_from_build
-from laken.local_lakehouse import LocalLakehouse
+from laken.local_lakehouse import refresh_table, reset_table
 
 load_environment()
 
@@ -40,7 +40,7 @@ def deploy(
 @app.command()
 def refresh(table: str) -> None:
     def run() -> None:
-        LocalLakehouse().refresh_table(table)
+        refresh_table(table)
 
     _exit_on_error(run)
 
@@ -48,7 +48,7 @@ def refresh(table: str) -> None:
 @app.command()
 def reset(table: str) -> None:
     def run() -> None:
-        LocalLakehouse().reset_table(table)
+        reset_table(table)
 
     _exit_on_error(run)
 

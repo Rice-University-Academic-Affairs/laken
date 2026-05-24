@@ -12,12 +12,7 @@ from laken._env import load_environment
 from laken.frames import from_arrow, to_arrow
 from laken.logger import ensure_logging, logger
 from laken.onelake_fetcher import default_fabric_fetcher
-from laken.table_names import (
-    TableRef,
-    format_fabric_table_name,
-    format_table_name,
-    parse_table_ref,
-)
+from laken.table_names import TableRef, format_fabric_table_name, parse_table_ref
 from laken.types import DataFrameTypeName, InputFrame, OutputFrame, WriteMode
 from laken.workspace import (
     DEFAULT_MAX_MIRROR_MB,
@@ -119,30 +114,7 @@ class LocalLakehouse:
             entry["source"] = source
         self._metadata.upsert(key, entry)
 
-    def list_tables(self) -> list[str]:
-        tables_root = self._root / "Tables"
-        names: list[str] = []
-        if not tables_root.is_dir():
-            return names
-        for item in sorted(tables_root.iterdir()):
-            if not item.is_dir():
-                continue
-            if (item / "_delta_log").is_dir():
-                names.append(format_table_name("dbo", item.name))
-                continue
-            for table_dir in sorted(item.iterdir()):
-                if table_dir.is_dir() and (table_dir / "_delta_log").is_dir():
-                    names.append(format_table_name(item.name, table_dir.name))
-        return sorted(names)
-
-    def table_exists(self, name: str) -> bool:
-        return (self._table_dir(name) / "_delta_log").is_dir()
-
-    def drop_table(self, name: str) -> None:
-        shutil.rmtree(self._table_dir(name), ignore_errors=True)
-        self._metadata.remove(self._table_key(name))
-
-    def refresh_table(self, name: str) -> None:
+    def _refresh_table(self, name: str) -> None:
         key = self._table_key(name)
         entry = self._metadata.table(key)
         if entry is None:
@@ -164,7 +136,7 @@ class LocalLakehouse:
         version = refreshed.get("source", {}).get("delta_version")
         logger.info("Refreshed %s from Fabric version %s.", key, version)
 
-    def reset_table(self, name: str) -> None:
+    def _reset_table(self, name: str) -> None:
         key = self._table_key(name)
         entry = self._metadata.table(key)
         if entry is None or entry.get("source") is None:
@@ -378,6 +350,14 @@ class LocalLakehouse:
         if self._root.name == "workspace":
             return self._root.parent / "metadata" / "tables.json"
         return self._root / "metadata" / "tables.json"
+
+
+def refresh_table(name: str) -> None:
+    LocalLakehouse()._refresh_table(name)
+
+
+def reset_table(name: str) -> None:
+    LocalLakehouse()._reset_table(name)
 
 
 def _format_bytes(size_bytes: int) -> str:

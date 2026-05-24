@@ -1,4 +1,5 @@
 import os
+import shutil
 
 import pandas as pd
 import polars as pl
@@ -92,11 +93,16 @@ def fabric_lakehouse(tmp_path, fabric_fetcher) -> LocalLakehouse:
     )
 
 
+def purge_local_table(lakehouse: LocalLakehouse, name: str) -> None:
+    shutil.rmtree(lakehouse._table_dir(name), ignore_errors=True)
+    lakehouse._metadata.remove(lakehouse._table_key(name))
+
+
 @pytest.fixture
 def clean_integration_table(fabric_lakehouse):
-    fabric_lakehouse.drop_table(INTEGRATION_TABLE)
+    purge_local_table(fabric_lakehouse, INTEGRATION_TABLE)
     yield
-    fabric_lakehouse.drop_table(INTEGRATION_TABLE)
+    purge_local_table(fabric_lakehouse, INTEGRATION_TABLE)
 
 
 @pytest.fixture

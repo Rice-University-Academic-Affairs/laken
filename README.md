@@ -152,8 +152,6 @@ df = lh.read_table("marketing.products", frame_type="polars")
 lh.write_table(df, "staging.products_snapshot")
 ```
 
-Optional utilities: `list_tables()`, `table_exists(name)`, `drop_table(name)`.
-
 ### CLI
 
 ```text

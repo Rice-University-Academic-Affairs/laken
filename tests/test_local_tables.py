@@ -35,23 +35,6 @@ class TestLocalTables:
         result = lakehouse.read_table("products", frame_type="pandas")
         assert len(result) == 2
 
-    def test_list_tables_sorted(self, lakehouse, sample_pandas):
-        lakehouse.write_table(sample_pandas, "products")
-        lakehouse.write_table(sample_pandas, "marketing.products")
-        assert lakehouse.list_tables() == ["dbo.products", "marketing.products"]
-
-    def test_table_exists_true(self, lakehouse, sample_pandas):
-        lakehouse.write_table(sample_pandas, "products")
-        assert lakehouse.table_exists("products")
-
-    def test_table_exists_false(self, lakehouse):
-        assert not lakehouse.table_exists("products")
-
-    def test_drop_table_removes(self, lakehouse, sample_pandas):
-        lakehouse.write_table(sample_pandas, "products")
-        lakehouse.drop_table("products")
-        assert not lakehouse.table_exists("products")
-
     def test_read_default_is_pandas(self, lakehouse, sample_pandas):
         lakehouse.write_table(sample_pandas, "products")
         result = lakehouse.read_table("products")

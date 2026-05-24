@@ -1,4 +1,5 @@
 import json
+import shutil
 
 import pandas as pd
 import pyarrow as pa
@@ -88,12 +89,12 @@ def test_write_to_mirror_converts_to_local_and_reset_restores_fabric(tmp_path, c
     assert "converts it to a local table" in capture_laken_logs.text
 
     fetcher.add("raw_faculty", pa.table({"id": [2]}), version=2, size_bytes=100)
-    lakehouse.refresh_table("raw_faculty")
+    lakehouse._refresh_table("raw_faculty")
 
     assert lakehouse.read_table("raw_faculty", frame_type="pandas")["id"].tolist() == [99]
     assert "local-only and has no Fabric source to refresh" in capture_laken_logs.text
 
-    lakehouse.reset_table("raw_faculty")
+    lakehouse._reset_table("raw_faculty")
 
     assert lakehouse.read_table("raw_faculty", frame_type="pandas")["id"].tolist() == [2]
     assert _metadata(root)["raw_faculty"]["state"] == "mirror"
@@ -109,7 +110,7 @@ def test_refresh_mirror_updates_cached_data_and_metadata(tmp_path, capture_laken
     capture_laken_logs.clear()
 
     fetcher.add("raw_faculty", pa.table({"id": [10, 11]}), version=3, size_bytes=100)
-    lakehouse.refresh_table("raw_faculty")
+    lakehouse._refresh_table("raw_faculty")
 
     result = lakehouse.read_table("raw_faculty", frame_type="pandas")
     assert result["id"].tolist() == [10, 11]
@@ -138,7 +139,7 @@ def test_refresh_sample_table_keeps_sample_when_mirror_limit_increased(tmp_path)
         max_mirror_mb=100,
         max_sample_rows=10000,
     )
-    lakehouse.refresh_table("fact_events")
+    lakehouse._refresh_table("fact_events")
 
     assert lakehouse.read_table("fact_events", frame_type="pandas")["id"].tolist() == [100, 101]
     assert fetcher.max_rows == [2]
@@ -159,7 +160,7 @@ def test_refresh_sample_table_re_fetches(tmp_path):
     fetcher.max_rows.clear()
     fetcher.add("fact_events", pa.table({"id": [100, 101, 102]}), version=6, size_bytes=500)
 
-    lakehouse.refresh_table("fact_events")
+    lakehouse._refresh_table("fact_events")
 
     assert lakehouse.read_table("fact_events", frame_type="pandas")["id"].tolist() == [100, 101]
     assert fetcher.max_rows == [2]
@@ -170,7 +171,7 @@ def test_refresh_missing_table_raises(tmp_path):
     root = tmp_path / ".laken" / "workspace"
     lakehouse = LocalLakehouse(root=root, fabric_fetcher=FakeFabricFetcher())
     with pytest.raises(FileNotFoundError, match="table not found"):
-        lakehouse.refresh_table("missing")
+        lakehouse._refresh_table("missing")
 
 
 def test_reset_without_fabric_source_raises(tmp_path):
@@ -178,7 +179,7 @@ def test_reset_without_fabric_source_raises(tmp_path):
     lakehouse = LocalLakehouse(root=root)
     lakehouse.write_table(pd.DataFrame({"id": [1]}), "local_only")
     with pytest.raises(ValueError, match="has no Fabric source to reset"):
-        lakehouse.reset_table("local_only")
+        lakehouse._reset_table("local_only")
 
 
 def test_cache_boundary_at_max_mirror_mb_uses_mirror(tmp_path):
@@ -224,7 +225,7 @@ def test_read_three_part_name_raises(tmp_path):
         lakehouse.read_table("MyWorkspace.Sales_LH.products", frame_type="pandas")
 
 
-def test_drop_table_removes_mirror_metadata(tmp_path):
+def test_purge_removes_mirror_metadata(tmp_path):
     root = tmp_path / ".laken" / "workspace"
     fetcher = FakeFabricFetcher()
     fetcher.add("raw_faculty", pa.table({"id": [1]}), version=1, size_bytes=100)
@@ -232,10 +233,11 @@ def test_drop_table_removes_mirror_metadata(tmp_path):
     lakehouse.read_table("raw_faculty", frame_type="pandas")
     assert "raw_faculty" in _metadata(root)
 
-    lakehouse.drop_table("raw_faculty")
+    shutil.rmtree(lakehouse._table_dir("raw_faculty"), ignore_errors=True)
+    lakehouse._metadata.remove("raw_faculty")
 
     assert "raw_faculty" not in _metadata(root)
-    assert not lakehouse.table_exists("raw_faculty")
+    assert not (lakehouse._table_dir("raw_faculty") / "_delta_log").is_dir()
 
 
 def test_read_without_fetcher_raises_file_not_found(tmp_path):
@@ -260,7 +262,7 @@ def test_write_delta_table_restores_backup_on_failure(tmp_path, monkeypatch):
     fetcher.add("raw_faculty", pa.table({"id": [9]}), version=2, size_bytes=100)
 
     with pytest.raises(RuntimeError, match="write failed"):
-        lakehouse.refresh_table("raw_faculty")
+        lakehouse._refresh_table("raw_faculty")
 
     assert lakehouse.read_table("raw_faculty", frame_type="pandas")["id"].tolist() == [1]
     assert (table_dir / "_delta_log").is_dir()
@@ -298,7 +300,7 @@ def test_refresh_uses_stored_fabric_source_table(tmp_path):
     fetcher.max_rows.clear()
     fetcher.add(fabric_name, pa.table({"id": [2]}), version=2, size_bytes=100)
 
-    lakehouse.refresh_table("marketing.products")
+    lakehouse._refresh_table("marketing.products")
 
     assert fetcher.inspect_names == [fabric_name]
     assert fetcher.fetch_names == [fabric_name]

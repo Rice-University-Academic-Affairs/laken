@@ -105,34 +105,6 @@ class TestFabricDefaultLakehouse:
         writer.saveAsTable.assert_called_with("products")
 
     @patch("laken.fabric_lakehouse.FabricLakehouse._notebookutils")
-    def test_list_tables(self, mock_nu_fn, mock_notebookutils):
-        mock_nu_fn.return_value = mock_notebookutils
-        lh = FabricLakehouse()
-        assert lh.list_tables() == ["dbo.products"]
-        mock_notebookutils.lakehouse.listTables.assert_called_with(
-            lakehouse="Default_LH",
-            workspaceId="ws-id-123",
-        )
-
-    @patch("laken.fabric_lakehouse.get_or_create_spark_session")
-    @patch("laken.fabric_lakehouse.FabricLakehouse._notebookutils")
-    def test_table_exists(self, mock_nu_fn, mock_spark_fn, mock_spark, mock_notebookutils):
-        mock_nu_fn.return_value = mock_notebookutils
-        mock_spark_fn.return_value = mock_spark
-        lh = FabricLakehouse()
-        assert lh.table_exists("products")
-        mock_spark.catalog.tableExists.assert_called_with("products")
-
-    @patch("laken.fabric_lakehouse.get_or_create_spark_session")
-    @patch("laken.fabric_lakehouse.FabricLakehouse._notebookutils")
-    def test_drop_table(self, mock_nu_fn, mock_spark_fn, mock_spark, mock_notebookutils):
-        mock_nu_fn.return_value = mock_notebookutils
-        mock_spark_fn.return_value = mock_spark
-        lh = FabricLakehouse()
-        lh.drop_table("products")
-        mock_spark.catalog.dropTable.assert_called_with("products", ignoreIfNotExists=True)
-
-    @patch("laken.fabric_lakehouse.FabricLakehouse._notebookutils")
     def test_resolve_three_part_name_raises(self, mock_nu_fn, mock_notebookutils):
         mock_nu_fn.return_value = mock_notebookutils
         lh = FabricLakehouse()

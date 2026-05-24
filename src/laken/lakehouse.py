@@ -99,15 +99,6 @@ class Lakehouse:
     def write_table(self, df: InputFrame, name: str, *, mode: WriteMode = "overwrite") -> None:
         self._implementation.write_table(df, name, mode=mode)
 
-    def list_tables(self) -> list[str]:
-        return self._implementation.list_tables()
-
-    def table_exists(self, name: str) -> bool:
-        return self._implementation.table_exists(name)
-
-    def drop_table(self, name: str) -> None:
-        self._implementation.drop_table(name)
-
 
 def _is_fabric_context() -> bool:
     try:

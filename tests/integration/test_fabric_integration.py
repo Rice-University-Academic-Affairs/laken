@@ -2,7 +2,7 @@ import json
 
 import pandas as pd
 import pytest
-from integration.conftest import INTEGRATION_TABLE, assert_frame_matches_spec
+from integration.conftest import INTEGRATION_TABLE, assert_frame_matches_spec, purge_local_table
 
 from laken.frames import dataframe_kind, from_arrow
 
@@ -45,14 +45,6 @@ class TestFabricLakehouseRead:
         assert first.equals(second)
         assert "Fetching" not in capture_laken_logs.text
 
-    def test_table_exists_after_hydrate(self, fabric_lakehouse):
-        fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
-        assert fabric_lakehouse.table_exists(INTEGRATION_TABLE)
-
-    def test_list_tables_includes_hydrated_table(self, fabric_lakehouse):
-        fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
-        assert f"dbo.{INTEGRATION_TABLE}" in fabric_lakehouse.list_tables()
-
     def test_read_missing_raises(self, fabric_lakehouse):
         with pytest.raises(FileNotFoundError):
             fabric_lakehouse.read_table("missing_integration_table", frame_type="pandas")
@@ -62,7 +54,7 @@ class TestFabricLakehouseRefresh:
     def test_refresh_updates_mirror(self, fabric_lakehouse, capture_laken_logs):
         fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
         capture_laken_logs.clear()
-        fabric_lakehouse.refresh_table(INTEGRATION_TABLE)
+        fabric_lakehouse._refresh_table(INTEGRATION_TABLE)
         result = fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
         assert_frame_matches_spec(result)
         assert "Refreshed" in capture_laken_logs.text
@@ -109,7 +101,7 @@ class TestFabricLakehouseWrite:
     ):
         fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
         fabric_lakehouse.write_table(local_row_pandas, INTEGRATION_TABLE)
-        fabric_lakehouse.reset_table(INTEGRATION_TABLE)
+        fabric_lakehouse._reset_table(INTEGRATION_TABLE)
         result = fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
         assert_frame_matches_spec(result)
         entry = _metadata_tables(fabric_lakehouse._root)[INTEGRATION_TABLE]
@@ -121,13 +113,13 @@ class TestFabricLakehouseWrite:
         fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
         fabric_lakehouse.write_table(local_row_pandas, INTEGRATION_TABLE)
         start = len(capture_laken_logs.records)
-        fabric_lakehouse.refresh_table(INTEGRATION_TABLE)
+        fabric_lakehouse._refresh_table(INTEGRATION_TABLE)
         messages = [record.message for record in capture_laken_logs.records[start:]]
         assert any("local-only" in message for message in messages)
 
-    def test_drop_table_removes_local_cache(self, fabric_lakehouse, clean_integration_table):
+    def test_purge_removes_local_cache(self, fabric_lakehouse, clean_integration_table):
         fabric_lakehouse.read_table(INTEGRATION_TABLE, frame_type="pandas")
         assert INTEGRATION_TABLE in _metadata_tables(fabric_lakehouse._root)
-        fabric_lakehouse.drop_table(INTEGRATION_TABLE)
-        assert not fabric_lakehouse.table_exists(INTEGRATION_TABLE)
+        purge_local_table(fabric_lakehouse, INTEGRATION_TABLE)
+        assert not (fabric_lakehouse._table_dir(INTEGRATION_TABLE) / "_delta_log").is_dir()
         assert INTEGRATION_TABLE not in _metadata_tables(fabric_lakehouse._root)

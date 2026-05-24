@@ -10,25 +10,25 @@ from laken.local_lakehouse import LocalLakehouse
 runner = CliRunner()
 
 
-@patch("laken.cli.LocalLakehouse")
-def test_refresh_command(mock_lh):
+@patch("laken.cli.refresh_table")
+def test_refresh_command(mock_refresh):
     result = runner.invoke(app, ["refresh", "raw_faculty"])
 
     assert result.exit_code == 0
-    mock_lh.return_value.refresh_table.assert_called_once_with("raw_faculty")
+    mock_refresh.assert_called_once_with("raw_faculty")
 
 
-@patch("laken.cli.LocalLakehouse")
-def test_reset_command(mock_lh):
+@patch("laken.cli.reset_table")
+def test_reset_command(mock_reset):
     result = runner.invoke(app, ["reset", "raw_faculty"])
 
     assert result.exit_code == 0
-    mock_lh.return_value.reset_table.assert_called_once_with("raw_faculty")
+    mock_reset.assert_called_once_with("raw_faculty")
 
 
-@patch("laken.cli.LocalLakehouse")
-def test_refresh_command_surfaces_errors(mock_lh):
-    mock_lh.return_value.refresh_table.side_effect = FileNotFoundError("table not found: x")
+@patch("laken.cli.refresh_table")
+def test_refresh_command_surfaces_errors(mock_refresh):
+    mock_refresh.side_effect = FileNotFoundError("table not found: x")
 
     result = runner.invoke(app, ["refresh", "x"])
 
