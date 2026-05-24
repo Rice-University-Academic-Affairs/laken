@@ -4,10 +4,10 @@ from pathlib import Path
 import pytest
 from packaging.version import Version
 
-from laken.deploy.build import run_build
+from laken.deploy.build import _find_wheel, build_wheel
 
 
-def test_run_build_uses_quiet_wheel_only_output(monkeypatch, tmp_path):
+def test_build_wheel_runs_uv_build_quietly(monkeypatch, tmp_path):
     pyproject = tmp_path / "pyproject.toml"
     pyproject.write_text("[project]\nname = 'my-app'\nversion = '0.1.0'\n")
     captured: dict = {}
@@ -22,7 +22,7 @@ def test_run_build_uses_quiet_wheel_only_output(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(subprocess, "run", fake_run)
 
-    wheel_path, version = run_build("my-app")
+    wheel_path, version = build_wheel("my-app")
 
     assert captured["cmd"] == [
         "uv",
@@ -38,7 +38,7 @@ def test_run_build_uses_quiet_wheel_only_output(monkeypatch, tmp_path):
     assert version == Version("0.1.0")
 
 
-def test_run_build_uses_project_dist_in_workspace(monkeypatch, tmp_path):
+def test_build_wheel_uses_project_dist_in_workspace(monkeypatch, tmp_path):
     member = tmp_path / "pkg"
     member.mkdir()
     (member / "pyproject.toml").write_text("[project]\nname = 'pkg'\nversion = '0.1.0'\n")
@@ -56,16 +56,15 @@ def test_run_build_uses_project_dist_in_workspace(monkeypatch, tmp_path):
     monkeypatch.chdir(member)
     monkeypatch.setattr(subprocess, "run", fake_run)
 
-    wheel_path, _ = run_build("pkg")
+    wheel_path, _ = build_wheel("pkg")
 
     assert recorded == [member / "dist"]
     assert wheel_path == member / "dist" / "pkg-0.1.0-py3-none-any.whl"
     assert not (tmp_path / "dist").exists()
 
 
-def test_run_build_subprocess_failure_propagates(monkeypatch, tmp_path):
-    pyproject = tmp_path / "pyproject.toml"
-    pyproject.write_text("[project]\nname = 'my-app'\nversion = '0.1.0'\n")
+def test_build_wheel_subprocess_failure_propagates(monkeypatch, tmp_path):
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'my-app'\nversion = '0.1.0'\n")
 
     def fake_run(*_args, **_kwargs):
         raise subprocess.CalledProcessError(1, ["uv", "build"])
@@ -74,4 +73,39 @@ def test_run_build_subprocess_failure_propagates(monkeypatch, tmp_path):
     monkeypatch.setattr(subprocess, "run", fake_run)
 
     with pytest.raises(subprocess.CalledProcessError):
-        run_build("my-app")
+        build_wheel("my-app")
+
+
+def test_find_wheel_ignores_other_projects(tmp_path):
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    expected = dist / "my_app-0.1.0-py3-none-any.whl"
+    (dist / "other_pkg-9.9.9-py3-none-any.whl").write_bytes(b"")
+    expected.write_bytes(b"")
+
+    wheel_path, version = _find_wheel(dist, "my-app")
+
+    assert wheel_path == expected
+    assert version == Version("0.1.0")
+
+
+def test_find_wheel_picks_highest_version(tmp_path):
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "my_app-0.1.0-py3-none-any.whl").write_bytes(b"")
+    expected = dist / "my_app-0.2.0-py3-none-any.whl"
+    expected.write_bytes(b"")
+
+    wheel_path, version = _find_wheel(dist, "my-app")
+
+    assert wheel_path == expected
+    assert version == Version("0.2.0")
+
+
+def test_find_wheel_missing_project_raises(tmp_path):
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "other-0.1.0-py3-none-any.whl").write_bytes(b"")
+
+    with pytest.raises(FileNotFoundError, match="my-app"):
+        _find_wheel(dist, "my-app")
