@@ -186,19 +186,20 @@ When you create a `Lakehouse` or run a `laken` command, laken loads a `.env` fil
 your project root. Variables already set in your shell or CI take precedence. Call
 `load_environment()` yourself only if you need those values earlier.
 
-| Variable | |
-| :--- | :--- |
-| `AZURE_TENANT_ID` | Azure AD tenant ID for your service principal |
-| `AZURE_CLIENT_ID` | Application (client) ID of the service principal |
-| `AZURE_CLIENT_SECRET` | Client secret for the service principal |
-| `FABRIC_WORKSPACE_NAME` | Fabric workspace display name (required locally, with the other three name/ID vars) |
-| `FABRIC_LAKEHOUSE_NAME` | Lakehouse display name to read from locally |
-| `FABRIC_WORKSPACE_ID` | Workspace GUID for OneLake paths and deploy |
-| `FABRIC_LAKEHOUSE_ID` | Lakehouse GUID for OneLake paths when reading locally |
-| `FABRIC_ENVIRONMENT_ID` | Fabric Environment that `laken deploy` publishes to |
+| Variable |
+| :--- |
+| `AZURE_TENANT_ID` — Azure AD tenant ID for your service principal |
+| `AZURE_CLIENT_ID` — Application ID of the service principal |
+| `AZURE_CLIENT_SECRET` — Client secret for the service principal |
+| `FABRIC_WORKSPACE_NAME` — Fabric workspace name |
+| `FABRIC_LAKEHOUSE_NAME` — Fabric Lakehouse name |
+| `FABRIC_WORKSPACE_ID` — Fabric Workspace GUID |
+| `FABRIC_LAKEHOUSE_ID` — Fabric Lakehouse GUID |
+| `FABRIC_ENVIRONMENT_ID` — Fabric Environment GUID that `laken deploy` publishes to |
 
-`AZURE_*` values come from an Azure service principal. In a Fabric notebook you can copy
-the Fabric variables from context:
+`AZURE_*` values come from an Azure service principal. 
+
+In a Fabric notebook you can copy the Fabric variables from context:
 
 ```python
 import notebookutils
