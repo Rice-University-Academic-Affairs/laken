@@ -6,6 +6,7 @@ from fake_fabric_fetcher import FakeFabricFetcher
 
 from laken.local_lakehouse import LocalLakehouse
 from laken.onelake_fetcher import OneLakeFabricFetcher, _access_token, default_fabric_fetcher
+from laken.table_names import TableRef
 
 
 def test_default_fabric_fetcher_without_credentials_returns_none(monkeypatch):
@@ -187,6 +188,21 @@ def test_onelake_fetcher_dbo_table_uri(mock_post, mock_delta, monkeypatch):
 
     uri = mock_delta.call_args.args[0]
     assert uri == "abfss://ws-id@onelake.dfs.fabric.microsoft.com/lh-id/Tables/products"
+
+
+def test_onelake_fetcher_accepts_fabric_four_part_fetch_name(monkeypatch):
+    monkeypatch.setenv("AZURE_TENANT_ID", "tenant-id")
+    monkeypatch.setenv("AZURE_CLIENT_ID", "client-id")
+    monkeypatch.setenv("AZURE_CLIENT_SECRET", "client-secret")
+    fetcher = OneLakeFabricFetcher(
+        workspace_name="MyWorkspace",
+        lakehouse="Sales_LH",
+        workspace_id="ws-uuid",
+        lakehouse_id="lh-uuid",
+    )
+    ref, fabric_name = fetcher._resolve_fetch_target("MyWorkspace.Sales_LH.dbo.products")
+    assert ref == TableRef(schema="dbo", table="products")
+    assert fabric_name == "MyWorkspace.Sales_LH.dbo.products"
 
 
 def test_onelake_fetcher_three_part_table_name_raises(monkeypatch):

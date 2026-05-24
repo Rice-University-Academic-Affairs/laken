@@ -5,7 +5,12 @@ import pyarrow as pa
 import requests
 from deltalake import DeltaTable
 
-from laken.table_names import TableRef, format_fabric_table_name, parse_table_ref
+from laken.table_names import (
+    TableRef,
+    format_fabric_table_name,
+    parse_table_ref,
+    table_name_parts,
+)
 from laken.workspace import FabricTableInfo
 
 ONELAKE_SCOPE = "https://storage.azure.com/.default"
@@ -30,9 +35,8 @@ class OneLakeFabricFetcher:
         self._lakehouse_id = lakehouse_id
 
     def inspect_table(self, name: str) -> FabricTableInfo:
-        ref = parse_table_ref(name)
+        ref, fabric_name = self._resolve_fetch_target(name)
         delta_table = self._delta_table(ref)
-        fabric_name = self._fabric_table_name(ref)
         actions = delta_table.get_add_actions()
         size_bytes = sum(
             value for value in actions.column("size_bytes").to_pylist() if value is not None
@@ -46,7 +50,8 @@ class OneLakeFabricFetcher:
         )
 
     def fetch_table(self, name: str, *, max_rows: int | None = None) -> pa.Table:
-        delta_table = self._delta_table(parse_table_ref(name))
+        ref, _ = self._resolve_fetch_target(name)
+        delta_table = self._delta_table(ref)
         if max_rows is None:
             return delta_table.to_pyarrow_table()
         return delta_table.to_pyarrow_dataset().head(max_rows)
@@ -58,6 +63,14 @@ class OneLakeFabricFetcher:
             ref.schema,
             ref.table,
         )
+
+    def _resolve_fetch_target(self, name: str) -> tuple[TableRef, str]:
+        stripped = name.strip()
+        parts = table_name_parts(stripped)
+        if len(parts) == 4:
+            return TableRef(schema=parts[2], table=parts[3]), stripped
+        ref = parse_table_ref(stripped)
+        return ref, self._fabric_table_name(ref)
 
     def _delta_table(self, ref: TableRef) -> DeltaTable:
         return DeltaTable(
