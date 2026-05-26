@@ -1,6 +1,6 @@
 [project]
 name = "laken"
-version = "0.2.5"
+version = "0.2.6"
 description = "Local Fabric table cache, lakehouse read/write, and deploy for modular Python on Microsoft Fabric"
 readme = "README.md"
 authors = [
