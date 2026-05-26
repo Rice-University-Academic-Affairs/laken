@@ -25,19 +25,18 @@ on Fabric and data lakes.
 
 ## Installation
 
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/) if needed, then add
-`laken`:
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then scaffold a
+project and add `laken`:
 
 ```bash
+uv init my-project
+cd my-project
 uv add laken
 ```
 
-```bash
-pip install laken
-```
+Already have a Python project? Run `uv init` in its root, then `uv add laken`.
 
-Deploy uses [uv](https://docs.astral.sh/uv/getting-started/installation/) to build your
-wheel before publishing to a Fabric environment.
+`laken deploy` builds your project wheel with uv before publishing to a Fabric environment.
 
 ---
 
